@@ -1,5 +1,0 @@
-C:/GibHub desktop/PBL_2/build/CMakeFiles/Qt6Demo.dir
-C:/GibHub desktop/PBL_2/build/CMakeFiles/edit_cache.dir
-C:/GibHub desktop/PBL_2/build/CMakeFiles/rebuild_cache.dir
-C:/GibHub desktop/PBL_2/build/CMakeFiles/Qt6Demo_autogen_timestamp_deps.dir
-C:/GibHub desktop/PBL_2/build/CMakeFiles/Qt6Demo_autogen.dir
