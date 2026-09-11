@@ -19,6 +19,7 @@ Preserve these properties:
 - The adjacency list represents each undirected connection consistently from both endpoints and does not create duplicate or dangling entries.
 - Core behavior does not silently fall back to an STL container with different semantics.
 - Bounds and invalid operations are handled explicitly instead of causing silent data loss.
+- These data structure are implemented such that, i can call and reuse them quickly and easily everywhere in this project. 
 
 Review checkpoint: this is the first teacher checkpoint. Be able to draw each structure, explain its stored state and main operations, state its time complexity at a beginner-appropriate level, and demonstrate the tests. Explain any templates, references, ownership, or dynamic allocation before using them.
 

@@ -1,0 +1,5 @@
+build/
+out/
+checkpoints/
+*.user
+*.vcxproj.user

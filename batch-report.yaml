@@ -1,0 +1,40 @@
+milestone: 1
+title: Custom data-structure foundations
+status: completed
+implementation_mode: greenfield
+tasks:
+  - id: T001
+    status: completed
+    files: [CMakeLists.txt]
+  - id: T002
+    status: completed
+    files: [include/pbl/dsa/DynamicArray.h, include/pbl/dsa/Queue.h]
+  - id: T003
+    status: completed
+    files: [include/pbl/dsa/PriorityQueue.h]
+  - id: T004
+    status: completed
+    files: [include/pbl/dsa/HashMap.h]
+  - id: T005
+    status: completed
+    files: [include/pbl/dsa/AdjacencyList.h]
+  - id: T006
+    status: completed
+    files: [tests/test_data_structures.cpp]
+required_endpoints: []
+tests:
+  command: cmake -S . -B build; cmake --build build; ctest --test-dir build --output-on-failure
+  passed: 1
+  failed: 0
+  skipped: 0
+  fallback_command: C:\MinGW\bin\g++.exe -std=c++14 -Wall -Wextra -Wpedantic -I include tests/test_data_structures.cpp -o build\pbl2_tests.exe; build\pbl2_tests.exe
+  fallback_result: passed
+warnings:
+  - severity: MEDIUM
+    message: PLAN.md has no formal task breakdown, feature spec REQ-XXX identifiers, or Requirement Mapping table; milestone traceability uses local T-IDs and records empty requirement lists.
+  - severity: HIGH
+    message: CMake and CTest were unavailable on PATH; the required C++20 CMake test command could not run.
+  - severity: LOW
+    message: The only available compiler is GCC 6.3, so fallback validation used C++14; CMakeLists.txt still requires C++20.
+  - severity: LOW
+    message: Qt6 is intentionally not linked in milestone 1 because this batch contains only reusable core templates and tests.

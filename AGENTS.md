@@ -19,6 +19,13 @@
 - Add focused tests for graph, routing, transfer, and failure-recovery behavior.
 - Each file has just one class.
 - After implement, please mark/comment what is milestones that implementation belong.
+- Use using namespace std for .cpp file and .h file.
+- Don't use size_t anymore please just use normal data types.
+- Try to nomalize the code as much as possible.
+- Use bits/stdc++.h library instead of include multi libraies.
+- Never use high leve programming language syntax/keyword. (such as: explicit, : initializer list)
+- Do not add unusual C++ guard syntax only to prevent a programmer mistake. In particular, avoid deleted copy constructors, deleted assignment operators, and unnecessary operator overloading in beginner-facing classes. Prefer simple documented usage rules that students can explain to a teacher.
+- Use a destructor only when the class truly owns resources that must be released, such as dynamically allocated memory. Explain the ownership and cleanup rule in a short comment.
 
 ## Rules
 
