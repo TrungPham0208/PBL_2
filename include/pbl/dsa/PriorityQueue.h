@@ -18,7 +18,7 @@ public:
 
     T pop() {
         if (empty()) {
-                throw out_of_range("cannot remove from an empty priority queue");
+            throw out_of_range("cannot remove from an empty priority queue");
         }
         T value = entries_[0].value;
         entries_[0] = entries_[entries_.size() - 1];
@@ -29,9 +29,9 @@ public:
         return value;
     }
 
-    const T& top() const {
+    const T& top() const { // max
         if (empty()) {
-                throw out_of_range("empty priority queue has no top");
+            throw out_of_range("empty priority queue has no top");
         }
         return entries_[0].value;
     }
@@ -43,7 +43,7 @@ private:
     struct Entry {
         T value;
         int priority;
-            int sequence;
+        int sequence;
     };
 
     DynamicArray<Entry> entries_;

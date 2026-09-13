@@ -16,6 +16,9 @@ void test_dynamic_array() {
     values.push_back(8);
     assert(values.size() == 2);
     assert(values.at(1) == 8);
+    assert(values[0] == 4);
+    values[0] = 40;
+    assert(values.at(0) == 40);
     values.pop_back();
     assert(values.size() == 1);
     bool rejected = false;

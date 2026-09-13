@@ -11,16 +11,11 @@ using namespace std;
 template <typename T>
 class DynamicArray {
 public:
-    DynamicArray() {
-        data_ = nullptr;
-        size_ = 0;
-        capacity_ = 0;
-    }
-
-    DynamicArray(int capacity) {
+    DynamicArray(int capacity = 0) {
         data_ = nullptr;
         size_ = 0;
         capacity_ = capacity;
+
         if (capacity_ > 0) {
             data_ = new T[capacity_]();
         }
@@ -30,14 +25,16 @@ public:
         data_ = nullptr;
         size_ = other.size_;
         capacity_ = other.capacity_;
+
         if (capacity_ > 0) {
             data_ = new T[capacity_]();
+
             for (int index = 0; index < size_; ++index) {
                 data_[index] = other.data_[index];
             }
         }
     }
-
+// i'm not comfort with operator keyword here, so can u delete or replace them, note: we don't need to over restrict the rules when use these data structure here, because implementing is tasks of AI, they can read codebase and write code exactly, and rarely make mistake like human, 
     DynamicArray& operator=(const DynamicArray& other) {
         if (this != &other) {
             delete[] data_;
@@ -68,11 +65,17 @@ public:
         --size_;
     }
 
+    // DynamicArray<int> values;
+    // values.at(0) = 10;
     T& at(int index) {
         check_index(index);
         return data_[index];
     }
-
+ 
+    // Used when the array itself is read-only:
+    // const DynamicArray<int> values;
+    // values.at(0);        // allowed
+    // values.at(0) = 10;   // blocked
     const T& at(int index) const {
         check_index(index);
         return data_[index];

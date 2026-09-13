@@ -17,7 +17,7 @@ public:
     };
 
     void add_node(const NodeId& node) {
-        if (find_node(node) == nullptr) {
+        if (node_index(node) == nodes_.size()) {
             nodes_.push_back(Vertex{node, {}});
         }
     }
@@ -42,32 +42,36 @@ public:
         add_node(first);
         add_node(second);
         if (has_edge(first, second)) {
-                throw invalid_argument("duplicate adjacency edge");
+            throw invalid_argument("duplicate adjacency edge");
         }
-        find_node(first)->edges.push_back(Edge{second, value});
-        find_node(second)->edges.push_back(Edge{first, value});
+        int first_index = node_index(first);
+        int second_index = node_index(second);
+        nodes_[first_index].edges.push_back(Edge{second, value});
+        nodes_[second_index].edges.push_back(Edge{first, value});
     }
 
     bool remove_undirected_edge(const NodeId& first, const NodeId& second) {
-        Vertex* first_vertex = find_node(first);
-        Vertex* second_vertex = find_node(second);
-        if (first_vertex == nullptr || second_vertex == nullptr || !has_edge(first, second)) {
+        int first_index = node_index(first);
+        int second_index = node_index(second);
+        if (first_index == nodes_.size() || second_index == nodes_.size() || !has_edge(first, second)) {
             return false;
         }
-        remove_directed_edge(*first_vertex, second);
-        remove_directed_edge(*second_vertex, first);
+        remove_directed_edge(nodes_[first_index], second);
+        remove_directed_edge(nodes_[second_index], first);
         return true;
     }
 
-    bool has_node(const NodeId& node) const { return find_node(node) != nullptr; }
+    bool has_node(const NodeId& node) const { 
+        return node_index(node) != nodes_.size(); 
+    }
 
     bool has_edge(const NodeId& first, const NodeId& second) const {
-        const Vertex* vertex = find_node(first);
-        if (vertex == nullptr) {
+        int vertex_index = node_index(first);
+        if (vertex_index == nodes_.size()) {
             return false;
         }
-        for (int index = 0; index < vertex->edges.size(); ++index) {
-            if (vertex->edges[index].destination == second) {
+        for (int index = 0; index < nodes_[vertex_index].edges.size(); ++index) {
+            if (nodes_[vertex_index].edges[index].destination == second) {
                 return true;
             }
         }
@@ -75,11 +79,11 @@ public:
     }
 
     const DynamicArray<Edge>& neighbors(const NodeId& node) const {
-        const Vertex* vertex = find_node(node);
-        if (vertex == nullptr) {
-                throw out_of_range("node is not present in adjacency list");
+        int vertex_index = node_index(node);
+        if (vertex_index == nodes_.size()) {
+            throw out_of_range("node is not present in adjacency list");
         }
-        return vertex->edges;
+        return nodes_[vertex_index].edges;
     }
 
     int node_count() const { return nodes_.size(); }
@@ -91,24 +95,6 @@ private:
     };
 
     DynamicArray<Vertex> nodes_;
-
-    Vertex* find_node(const NodeId& node) {
-        for (int index = 0; index < nodes_.size(); ++index) {
-            if (nodes_[index].id == node) {
-                return &nodes_[index];
-            }
-        }
-        return nullptr;
-    }
-
-    const Vertex* find_node(const NodeId& node) const {
-        for (int index = 0; index < nodes_.size(); ++index) {
-            if (nodes_[index].id == node) {
-                return &nodes_[index];
-            }
-        }
-        return nullptr;
-    }
 
     int node_index(const NodeId& node) const {
         for (int index = 0; index < nodes_.size(); ++index) {
@@ -122,6 +108,7 @@ private:
     void remove_directed_edge(Vertex& vertex, const NodeId& destination) {
         for (int index = 0; index < vertex.edges.size(); ++index) {
             if (vertex.edges[index].destination == destination) {
+                // replaces the removed node with the last node
                 vertex.edges[index] = move(vertex.edges[vertex.edges.size() - 1]);
                 vertex.edges.pop_back();
                 return;

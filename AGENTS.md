@@ -23,9 +23,10 @@
 - Don't use size_t anymore please just use normal data types.
 - Try to nomalize the code as much as possible.
 - Use bits/stdc++.h library instead of include multi libraies.
-- Never use high leve programming language syntax/keyword. (such as: explicit, : initializer list)
+- Never use high level programming language syntax/keyword. (such as: explicit, : initializer list)
 - Do not add unusual C++ guard syntax only to prevent a programmer mistake. In particular, avoid deleted copy constructors, deleted assignment operators, and unnecessary operator overloading in beginner-facing classes. Prefer simple documented usage rules that students can explain to a teacher.
 - Use a destructor only when the class truly owns resources that must be released, such as dynamically allocated memory. Explain the ownership and cleanup rule in a short comment.
+- You can also use pointer for some case, but please treat it as a final option because i'm not good at C++ pointer.
 
 ## Rules
 

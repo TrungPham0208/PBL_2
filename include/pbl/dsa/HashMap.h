@@ -19,7 +19,6 @@ public:
         // A map with no buckets cannot store or find any key.
         if (bucket_count == 0) {
             throw invalid_argument("hash map requires at least one bucket");
-        // End of the validation condition.
         }
     }
 
@@ -96,14 +95,20 @@ private:
     struct Entry {
         Key key;
         Value value;
+        // This pointer links entries that share the same hash bucket.
         Entry* next;
     };
 
+    // Entry pointers are used because this milestone visibly teaches chained hash buckets.
     DynamicArray<Entry*> buckets_;
     int bucket_count_;
     int size_ = 0;
 
-    int bucket_index(const Key& key) const { return hash<Key>{}(key) % bucket_count_; }
+    // The final const means this function promises not to change any objects here.
+    int bucket_index(Key key) const {
+        hash<Key> calculator;
+        return calculator(key) % bucket_count_;
+    }
 
     Entry* find_entry(const Key& key) {
         Entry* current = buckets_[bucket_index(key)];
