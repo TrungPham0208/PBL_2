@@ -12,7 +12,7 @@ using namespace std;
 template <typename T>
 class Queue {
 public:
-    Queue(int capacity) {
+    Queue(int capacity = 1) {
         slots_ = DynamicArray<T>(capacity);
         capacity_ = capacity;
         head_ = 0;

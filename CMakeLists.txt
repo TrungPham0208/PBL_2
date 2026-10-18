@@ -12,12 +12,39 @@ add_executable(pbl2_tests
     tests/test_data_structures.cpp
 )
 
+add_executable(pbl2_model_tests
+    tests/test_model.cpp
+    src/model/Node.cpp
+    src/model/Client.cpp
+    src/model/Router.cpp
+    src/model/Packet.cpp
+    src/model/Link.cpp
+)
+
+add_executable(pbl2_graph_tests
+    tests/test_graph.cpp
+    src/model/Node.cpp
+    src/model/Client.cpp
+    src/model/Router.cpp
+    src/model/Packet.cpp
+    src/model/Link.cpp
+    src/model/NetworkGraph.cpp
+)
+
 target_include_directories(pbl2_tests PRIVATE . include)
+target_include_directories(pbl2_model_tests PRIVATE . include)
+target_include_directories(pbl2_graph_tests PRIVATE . include)
 
 if (MSVC)
     target_compile_options(pbl2_tests PRIVATE /W4 /permissive-)
+    target_compile_options(pbl2_model_tests PRIVATE /W4 /permissive-)
+    target_compile_options(pbl2_graph_tests PRIVATE /W4 /permissive-)
 else()
     target_compile_options(pbl2_tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(pbl2_model_tests PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(pbl2_graph_tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 add_test(NAME pbl2_data_structures COMMAND pbl2_tests)
+add_test(NAME pbl2_model COMMAND pbl2_model_tests)
+add_test(NAME pbl2_graph COMMAND pbl2_graph_tests)

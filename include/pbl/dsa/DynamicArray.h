@@ -34,7 +34,7 @@ public:
             }
         }
     }
-// i'm not comfort with operator keyword here, so can u delete or replace them, note: we don't need to over restrict the rules when use these data structure here, because implementing is tasks of AI, they can read codebase and write code exactly, and rarely make mistake like human, 
+
     DynamicArray& operator=(const DynamicArray& other) {
         if (this != &other) {
             delete[] data_;
