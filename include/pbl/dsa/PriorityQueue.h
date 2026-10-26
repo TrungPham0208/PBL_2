@@ -38,6 +38,10 @@ public:
 
     bool empty() const { return entries_.empty(); }
     int size() const { return entries_.size(); }
+    void clear() {
+        entries_.clear();
+        next_sequence_ = 0;
+    }
 
 private:
     struct Entry {

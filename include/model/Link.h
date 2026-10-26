@@ -3,15 +3,16 @@
 #include <bits/stdc++.h>
 
 #include "model/Packet.h"
-#include "pbl/dsa/Queue.h"
+#include "pbl/dsa/PriorityQueue.h"
 
 using namespace std;
 
 namespace pbl {
 namespace model {
 
-// Milestone 2: one Link object owns the shared state for both directions.
-// Its queue is bounded and uses the custom FIFO structure from Milestone 1.
+// Milestone 2 & Milestone 5: Link owns the shared state for both directions.
+// Milestone 5: Bounded packet queue with priority scheduling (ACK & ROUTE_PROBE > HEARTBEAT & ROUTE_UPDATE > DATA)
+// and FIFO ordering for equal-priority packets.
 class Link {
 public:
     Link(int first_node_id, int second_node_id, int bandwidth,
@@ -37,6 +38,7 @@ public:
     void set_loss_probability(double probability);
     void set_corruption_probability(double probability);
 
+    // Queue management with priority scheduling
     void enqueue(const Packet& packet);
     Packet dequeue();
     const Packet& front() const;
@@ -44,6 +46,16 @@ public:
     bool queue_full() const;
     int queue_size() const;
     int queue_capacity() const;
+    void clear_queue();
+
+    // Priority mapping helper:
+    // ACK and ROUTE_PROBE (3) > HEARTBEAT and ROUTE_UPDATE (2) > DATA (1)
+    int get_packet_priority(const Packet& packet) const;
+
+    // Transmission busy-state tracking for fixed-tick simulation
+    int get_busy_until_tick() const;
+    void set_busy_until_tick(int tick);
+    bool is_busy(int current_tick) const;
 
 private:
     int first_node_id_;
@@ -53,7 +65,9 @@ private:
     double loss_probability_;
     double corruption_probability_;
     bool active_;
-    dsa::Queue<Packet> packet_queue_;
+    int queue_capacity_;
+    int busy_until_tick_;
+    dsa::PriorityQueue<Packet> packet_queue_;
 
     void validate_probability(double probability) const;
 };
