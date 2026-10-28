@@ -38,6 +38,8 @@ Link::Link(int first_node_id, int second_node_id, int bandwidth,
     queue_capacity_ = queue_capacity;
     busy_until_tick_ = 0;
     active_ = true;
+    inject_loss_next_ = false;
+    inject_corruption_next_ = false;
 }
 
 int Link::get_first_node_id() const { return first_node_id_; }
@@ -143,6 +145,36 @@ void Link::validate_probability(double probability) const {
     if (probability < 0.0 || probability > 1.0) {
         throw invalid_argument("probability must be between zero and one");
     }
+}
+
+// Milestone 8: Manual loss and corruption injection implementation
+void Link::inject_loss_next() {
+    inject_loss_next_ = true;
+}
+
+void Link::inject_corruption_next() {
+    inject_corruption_next_ = true;
+}
+
+bool Link::should_inject_loss() {
+    if (inject_loss_next_) {
+        inject_loss_next_ = false; // One-shot injection consumed
+        return true;
+    }
+    return false;
+}
+
+bool Link::should_inject_corruption() {
+    if (inject_corruption_next_) {
+        inject_corruption_next_ = false; // One-shot injection consumed
+        return true;
+    }
+    return false;
+}
+
+void Link::clear_injections() {
+    inject_loss_next_ = false;
+    inject_corruption_next_ = false;
 }
 
 }

@@ -1,0 +1,191 @@
+{
+  "experiment_id": "EXP-1793151320725",
+  "outcome": "FAILURE",
+  "total_ticks": 355,
+  "configuration": {
+    "random_seed": 12345,
+    "chunk_size": 1024,
+    "heartbeat_interval": 100,
+    "failure_timeout": 300,
+    "source_client_id": 1,
+    "destination_client_id": 2,
+    "nodes": [
+      {
+        "id": 1,
+        "name": "Client1",
+        "type": "Client"
+      },
+      {
+        "id": 2,
+        "name": "Client2",
+        "type": "Client"
+      },
+      {
+        "id": 3,
+        "name": "Router3",
+        "type": "Router"
+      },
+      {
+        "id": 4,
+        "name": "Router4",
+        "type": "Router"
+      },
+      {
+        "id": 5,
+        "name": "Router5",
+        "type": "Router"
+      },
+      {
+        "id": 6,
+        "name": "Router6",
+        "type": "Router"
+      }
+    ],
+    "links": [
+      {
+        "node_a": 1,
+        "node_b": 3,
+        "bandwidth": 100,
+        "latency": 5,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 1,
+        "node_b": 4,
+        "bandwidth": 80,
+        "latency": 15,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 2,
+        "node_b": 4,
+        "bandwidth": 100,
+        "latency": 5,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 2,
+        "node_b": 5,
+        "bandwidth": 80,
+        "latency": 15,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 3,
+        "node_b": 4,
+        "bandwidth": 150,
+        "latency": 10,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 3,
+        "node_b": 6,
+        "bandwidth": 200,
+        "latency": 15,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 4,
+        "node_b": 5,
+        "bandwidth": 150,
+        "latency": 15,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 4,
+        "node_b": 6,
+        "bandwidth": 100,
+        "latency": 15,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      },
+      {
+        "node_a": 5,
+        "node_b": 6,
+        "bandwidth": 200,
+        "latency": 15,
+        "loss_probability": 0,
+        "corruption_probability": 0,
+        "queue_capacity": 10
+      }
+    ]
+  },
+  "statistics": {
+    "sent_count": 1,
+    "delivered_count": 0,
+    "dropped_count": 1,
+    "queue_overflow_count": 0,
+    "failure_drop_count": 1,
+    "lost_count": 0,
+    "corrupted_count": 0,
+    "manual_failure_count": 2,
+    "heartbeat_timeout_count": 0,
+    "transfer_acknowledged_count": 0,
+    "transfer_retransmitted_count": 2,
+    "transfer_timeout_count": 3,
+    "transfer_failed_count": 1
+  },
+  "route_changes": [],
+  "packet_events": [
+    "[0 ms] Simulation: Simulation clock and metrics reset ()",
+    "[0 ms] Topology: Generated topology with seed 12345 (6 nodes, density=0.450000)",
+    "[0 ms] Simulation: Simulation clock and metrics reset ()",
+    "[0 ms] Topology: Generated topology with seed 12345 (6 nodes, density=0.450000)",
+    "[0 ms] Probe: Dispatched hop-by-hop ROUTE_PROBE from Client 1 to Client 2 (Planned Route: 1 -> 4 -> 2)",
+    "[23 ms] Probe: ROUTE_PROBE delivered to destination! Discovered Path: 1 -> 4 -> 2 (Hops: 2)",
+    "[60 ms] Transfer: Initiated file transfer: Client 1 -> Client 2 (4 chunks)",
+    "[60 ms] Simulation: Simulation started ()",
+    "[61 ms] Sender: Dispatched DATA Chunk #0 (Seq: 0)",
+    "[62 ms] Sender: Dispatched DATA Chunk #1 (Seq: 1)",
+    "[63 ms] Sender: Dispatched DATA Chunk #2 (Seq: 2)",
+    "[64 ms] Sender: Dispatched DATA Chunk #3 (Seq: 3)",
+    "[161 ms] Retransmit: Retransmitted DATA Chunk #0 (Attempt: 2)",
+    "[162 ms] Retransmit: Retransmitted DATA Chunk #1 (Attempt: 2)",
+    "[163 ms] Retransmit: Retransmitted DATA Chunk #2 (Attempt: 2)",
+    "[164 ms] Retransmit: Retransmitted DATA Chunk #3 (Attempt: 2)",
+    "[216 ms] Receiver: Verified Chunk #0 checksum. Emitting ACK. (Seq: 0)",
+    "[217 ms] Receiver: Verified Chunk #1 checksum. Emitting ACK. (Seq: 1)",
+    "[218 ms] Receiver: Verified Chunk #2 checksum. Emitting ACK. (Seq: 2)",
+    "[219 ms] Receiver: Verified Chunk #3 checksum. Emitting ACK. (Seq: 3)",
+    "[261 ms] Retransmit: Retransmitted DATA Chunk #0 (Attempt: 3)",
+    "[262 ms] Retransmit: Retransmitted DATA Chunk #1 (Attempt: 3)",
+    "[263 ms] Retransmit: Retransmitted DATA Chunk #2 (Attempt: 3)",
+    "[264 ms] Retransmit: Retransmitted DATA Chunk #3 (Attempt: 3)",
+    "[267 ms] Sender: Received ACK for Chunk #0 (Seq: 0)",
+    "[268 ms] Sender: Received ACK for Chunk #1 (Seq: 1)",
+    "[269 ms] Sender: Received ACK for Chunk #2 (Seq: 2)",
+    "[270 ms] Sender: Received ACK for Chunk #3 (Seq: 3)",
+    "[270 ms] Transfer: Transfer COMPLETED successfully! Reconstructed 128 bytes. (Integrity 100%)",
+    "[320 ms] Receiver: Verified Chunk #0 checksum. Emitting ACK. (Seq: 0)",
+    "[321 ms] Receiver: Verified Chunk #1 checksum. Emitting ACK. (Seq: 1)",
+    "[322 ms] Receiver: Verified Chunk #2 checksum. Emitting ACK. (Seq: 2)",
+    "[323 ms] Receiver: Verified Chunk #3 checksum. Emitting ACK. (Seq: 3)",
+    "[371 ms] Transfer: Transfer COMPLETED successfully! Reconstructed 128 bytes. (Integrity 100%)",
+    "[372 ms] Transfer: Transfer COMPLETED successfully! Reconstructed 128 bytes. (Integrity 100%)",
+    "[373 ms] Transfer: Transfer COMPLETED successfully! Reconstructed 128 bytes. (Integrity 100%)",
+    "[374 ms] Transfer: Transfer COMPLETED successfully! Reconstructed 128 bytes. (Integrity 100%)",
+    "[475 ms] Storage: Exported experiment results to data/experiments/demonstration_recovery.json ()",
+    "[0 ms] Simulation: Simulation clock and metrics reset ()",
+    "[0 ms] Topology: Generated topology with seed 12345 (6 nodes, density=0.450000)",
+    "[0 ms] Transfer: Initiated file transfer: Client 1 -> Client 2 (1 chunks)",
+    "[0 ms] Simulation: Simulation started ()",
+    "[1 ms] Sender: Dispatched DATA Chunk #0 (Seq: 0)",
+    "[101 ms] Retransmit: Retransmit attempted for Chunk #0 but no route available (Attempt: 2)",
+    "[201 ms] Retransmit: Retransmit attempted for Chunk #0 but no route available (Attempt: 3)"
+  ]
+}

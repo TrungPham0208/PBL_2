@@ -192,6 +192,190 @@ void test_duplicate_chunks_idempotency() {
     assert(transfer.get_received_chunk_count() == 1);
 }
 
+// Milestone 7: Test individual ACK tracking, duplicate handling, and invariant checks
+void test_individual_ack_tracking() {
+    pbl::services::TransferService transfer;
+    transfer.init_sender("HelloACKTracker", 5); // 15 characters -> 3 chunks (5, 5, 5)
+    assert(transfer.get_sender_chunk_count() == 3);
+    assert(transfer.get_transfer_status() == pbl::services::TransferService::TransferStatus::IDLE);
+
+    // Initial check: no chunk acknowledged
+    assert(!transfer.is_chunk_acknowledged(0));
+    assert(!transfer.is_chunk_acknowledged(1));
+    assert(!transfer.is_chunk_acknowledged(2));
+    assert(transfer.get_chunk_attempts(0) == 0);
+
+    // Dispatch chunk 0 at tick 10
+    model::Packet pkt0 = transfer.send_chunk(0, 1, 2, 10);
+    assert(pkt0.get_type() == model::Packet::Type::DATA);
+    assert(pkt0.get_sequence_number() == 0);
+    assert(transfer.get_chunk_attempts(0) == 1);
+    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::IN_FLIGHT);
+    assert(transfer.get_transfer_status() == pbl::services::TransferService::TransferStatus::IN_PROGRESS);
+
+    // Invariant: Non-ACK packets (e.g. DATA or ROUTE_PROBE) cannot mark chunks delivered
+    model::Packet fake_data(model::Packet::Type::DATA, 2, 1, 0, "test", 4, 0);
+    assert(!transfer.process_ack_packet(fake_data));
+    assert(!transfer.is_chunk_acknowledged(0));
+
+    // Invariant: Out-of-range ACK sequence numbers are rejected
+    model::Packet out_of_bounds_ack = transfer.create_ack_packet(2, 1, 99);
+    assert(!transfer.process_ack_packet(out_of_bounds_ack));
+
+    // Valid ACK for chunk 0 marks it delivered
+    model::Packet ack0 = transfer.create_ack_packet(2, 1, 0);
+    assert(transfer.process_ack_packet(ack0));
+    assert(transfer.is_chunk_acknowledged(0));
+    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::ACKNOWLEDGED);
+    assert(!transfer.is_transfer_completed()); // 1/3 acknowledged
+
+    // Invariant: Duplicate ACK is ignored idempotently without inflating counts
+    assert(!transfer.process_ack_packet(ack0));
+    assert(transfer.get_statistics().acknowledged_count == 1);
+
+    // Invariant: Trying to send an already acknowledged chunk is rejected
+    bool resend_rejected = false;
+    try {
+        transfer.send_chunk(0, 1, 2, 20);
+    } catch (const runtime_error&) {
+        resend_rejected = true;
+    }
+    assert(resend_rejected);
+}
+
+// Milestone 7: Test that lost or corrupted DATA packet remains unacknowledged
+void test_unacknowledged_on_loss_or_corruption() {
+    pbl::services::TransferService transfer;
+    transfer.init_sender("IntegrityTestData", 10);
+    transfer.init_receiver(transfer.get_sender_chunk_count());
+
+    model::Packet pkt = transfer.send_chunk(0, 1, 2, 0);
+
+    // Simulate corruption in transit
+    pkt.set_payload("CorruptData!");
+
+    // Receiver rejects corrupted packet
+    bool accepted = transfer.receive_chunk_packet(pkt);
+    assert(!accepted);
+
+    // Invariant: A lost, corrupted, or missing DATA packet remains unacknowledged
+    assert(!transfer.is_chunk_acknowledged(0));
+    assert(transfer.get_statistics().acknowledged_count == 0);
+}
+
+// Milestone 7: Test timeout detection and retransmission walkthrough (Scenario: one timeout/retry)
+void test_timeout_and_retransmission_walkthrough() {
+    pbl::services::TransferService transfer;
+    transfer.init_sender("TestDataForRetransmission", 10); // 3 chunks
+    transfer.init_receiver(3);
+
+    // Initial configuration: 100 ms timeout, 3 max attempts
+    assert(transfer.get_ack_timeout() == 100);
+    assert(transfer.get_max_attempts() == 3);
+
+    // Send chunk 0 at tick 0 (Attempt 1)
+    model::Packet pkt0 = transfer.send_chunk(0, 1, 2, 0);
+    assert(transfer.get_chunk_attempts(0) == 1);
+    assert(transfer.get_statistics().sent_count == 1);
+    assert(transfer.get_statistics().retransmitted_count == 0);
+
+    // At tick 50: no timeout yet (< 100 ms)
+    dsa::DynamicArray<int> timeouts_at_50 = transfer.check_timeouts(50);
+    assert(timeouts_at_50.empty());
+
+    // At tick 100: timeout occurs for chunk 0! (100 - 0 >= 100)
+    dsa::DynamicArray<int> timeouts_at_100 = transfer.check_timeouts(100);
+    assert(timeouts_at_100.size() == 1);
+    assert(timeouts_at_100[0] == 0);
+    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::TIMED_OUT);
+    assert(transfer.get_statistics().timeout_count == 1);
+
+    // Retransmit chunk 0 at tick 100 (Attempt 2)
+    model::Packet retry_pkt0 = transfer.send_chunk(0, 1, 2, 100);
+    assert(transfer.get_chunk_attempts(0) == 2);
+    assert(transfer.get_statistics().sent_count == 2);
+    assert(transfer.get_statistics().retransmitted_count == 1);
+
+    // Receiver accepts retransmitted chunk 0
+    assert(transfer.receive_chunk_packet(retry_pkt0));
+
+    // Receiver generates ACK, sender receives ACK at tick 120
+    model::Packet ack0 = transfer.create_ack_packet(2, 1, 0);
+    assert(transfer.process_ack_packet(ack0));
+    assert(transfer.is_chunk_acknowledged(0));
+    assert(transfer.get_statistics().acknowledged_count == 1);
+}
+
+// Milestone 7: Test retry limit reached and transfer failure (Scenario: retry-limit failure)
+void test_retry_limit_failure_walkthrough() {
+    pbl::services::TransferService transfer;
+    transfer.init_sender("FailureData", 10); // 2 chunks
+
+    // Attempt 1 at tick 0
+    transfer.send_chunk(0, 1, 2, 0);
+    assert(transfer.get_chunk_attempts(0) == 1);
+
+    // Tick 100: timeout 1 -> retransmit
+    dsa::DynamicArray<int> to1 = transfer.check_timeouts(100);
+    assert(to1.size() == 1 && to1[0] == 0);
+    // Attempt 2 at tick 100
+    transfer.send_chunk(0, 1, 2, 100);
+    assert(transfer.get_chunk_attempts(0) == 2);
+
+    // Tick 200: timeout 2 -> retransmit
+    dsa::DynamicArray<int> to2 = transfer.check_timeouts(200);
+    assert(to2.size() == 1 && to2[0] == 0);
+    // Attempt 3 at tick 200 (maximum allowed attempts)
+    transfer.send_chunk(0, 1, 2, 200);
+    assert(transfer.get_chunk_attempts(0) == 3);
+
+    // Tick 300: timeout 3 (attempt 3 has timed out: 300 - 200 >= 100)
+    dsa::DynamicArray<int> to3 = transfer.check_timeouts(300);
+
+    // Invariant: The transfer fails after the final allowed attempt (3 attempts) and preserves evidence in statistics.
+    assert(to3.empty()); // No more retransmissions allowed!
+    assert(transfer.is_transfer_failed());
+    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::FAILED);
+
+    const pbl::services::TransferService::TransferStatistics& stats = transfer.get_statistics();
+    assert(stats.sent_count == 3);
+    assert(stats.retransmitted_count == 2);
+    assert(stats.timeout_count == 3);
+    assert(stats.failed_count == 1);
+    assert(stats.acknowledged_count == 0);
+}
+
+// Milestone 7: Test that acknowledged chunks are not retransmitted unnecessarily after route failure
+void test_unacknowledged_chunks_after_route_failure() {
+    pbl::services::TransferService transfer;
+    transfer.init_sender("ABCDEFGHIJKLMNO", 5); // 3 chunks: seq 0, 1, 2
+    assert(transfer.get_sender_chunk_count() == 3);
+
+    transfer.send_chunk(0, 1, 2, 0);
+    transfer.send_chunk(1, 1, 2, 0);
+    transfer.send_chunk(2, 1, 2, 0);
+
+    // Chunks 0 and 2 receive ACKs successfully
+    transfer.process_ack_packet(transfer.create_ack_packet(2, 1, 0));
+    transfer.process_ack_packet(transfer.create_ack_packet(2, 1, 2));
+
+    // Chunk 1 was in transit when the route failed and its ACK was lost.
+    // Invariant: Acknowledged chunks are not retransmitted unnecessarily after a route failure.
+    dsa::DynamicArray<int> unacked = transfer.get_unacknowledged_chunks();
+    assert(unacked.size() == 1);
+    assert(unacked[0] == 1);
+
+    // Verify chunk 0 and 2 remain acknowledged
+    assert(transfer.is_chunk_acknowledged(0));
+    assert(!transfer.is_chunk_acknowledged(1));
+    assert(transfer.is_chunk_acknowledged(2));
+
+    // Transfer can be resumed for chunk 1 over a replacement route
+    transfer.send_chunk(1, 1, 2, 100);
+    transfer.process_ack_packet(transfer.create_ack_packet(2, 1, 1));
+    assert(transfer.is_transfer_completed());
+}
+
 } // namespace
 
 int main() {
@@ -201,6 +385,14 @@ int main() {
     test_checksum_mismatch_rejects_data();
     test_sender_state();
     test_duplicate_chunks_idempotency();
-    cout << "All Milestone 6 chunking, checksums, and reconstruction tests passed successfully!" << endl;
+
+    // Milestone 7 tests
+    test_individual_ack_tracking();
+    test_unacknowledged_on_loss_or_corruption();
+    test_timeout_and_retransmission_walkthrough();
+    test_retry_limit_failure_walkthrough();
+    test_unacknowledged_chunks_after_route_failure();
+
+    cout << "All Milestone 6 and Milestone 7 reliable transfer tests passed successfully!" << endl;
     return 0;
 }

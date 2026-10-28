@@ -57,6 +57,13 @@ public:
     void set_busy_until_tick(int tick);
     bool is_busy(int current_tick) const;
 
+    // Milestone 8: Manual loss and corruption injection
+    void inject_loss_next();
+    void inject_corruption_next();
+    bool should_inject_loss();
+    bool should_inject_corruption();
+    void clear_injections();
+
 private:
     int first_node_id_;
     int second_node_id_;
@@ -68,6 +75,10 @@ private:
     int queue_capacity_;
     int busy_until_tick_;
     dsa::PriorityQueue<Packet> packet_queue_;
+
+    // Milestone 8 state
+    bool inject_loss_next_;
+    bool inject_corruption_next_;
 
     void validate_probability(double probability) const;
 };

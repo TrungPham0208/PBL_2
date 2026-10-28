@@ -6,17 +6,21 @@
 #include "model/NetworkGraph.h"
 #include "model/Packet.h"
 #include "pbl/dsa/DynamicArray.h"
+#include "pbl/dsa/HashMap.h"
 
 using namespace std;
 
 namespace pbl {
 namespace services {
 
-// Milestone 5: Core logic — Queues and fixed-tick simulation
+class RoutingService;
+
+// Milestone 5, 8 & 9: Fixed-tick simulation, link queues, failure detection, and automatic rerouting
 // SimulationService implements the 1 ms discrete step clock,
 // priority-based link queue scheduling, bandwidth serialization delay,
 // transmission latency, deterministic packet dropping upon node/link failure,
-// and simulation control states (start, pause, resume, reset, tick).
+// deterministic manual loss/corruption injection, configured random loss/corruption,
+// manual failure handling, and heartbeat-based router failure detection.
 class SimulationService {
 public:
     enum class State {
@@ -67,6 +71,10 @@ public:
         int dropped_count;
         int queue_overflow_count;
         int failure_drop_count;
+        int lost_count;
+        int corrupted_count;
+        int manual_failure_count;
+        int heartbeat_timeout_count;
 
         Statistics() {
             sent_count = 0;
@@ -74,8 +82,15 @@ public:
             dropped_count = 0;
             queue_overflow_count = 0;
             failure_drop_count = 0;
+            lost_count = 0;
+            corrupted_count = 0;
+            manual_failure_count = 0;
+            heartbeat_timeout_count = 0;
         }
     };
+
+    static const int DEFAULT_HEARTBEAT_INTERVAL = 100; // 100 ms per SPEC.md
+    static const int DEFAULT_FAILURE_TIMEOUT = 300;    // 300 ms per SPEC.md
 
     SimulationService();
     // SimulationService does not manage dynamically allocated heap memory,
@@ -83,6 +98,10 @@ public:
 
     void set_network_graph(model::NetworkGraph* graph);
     model::NetworkGraph* get_network_graph() const;
+
+    // Milestone 9: Routing service attachment for automatic hop-by-hop forwarding and rerouting
+    void set_routing_service(RoutingService* routing);
+    RoutingService* get_routing_service() const;
 
     // Simulation lifecycle controls
     void start();
@@ -117,14 +136,52 @@ public:
     void process_node_failure(int node_id);
     void process_link_failure(int first_node_id, int second_node_id);
 
+    // Milestone 8: Random seed for deterministic simulation experiments
+    void set_random_seed(unsigned int seed);
+    double generate_random_probability();
+
+    // Milestone 8: Manual packet loss and corruption injection
+    void inject_link_loss(int from_node_id, int to_node_id);
+    void inject_link_corruption(int from_node_id, int to_node_id);
+
+    // Milestone 8: Manual node and link failures (takes effect immediately)
+    void fail_node_manually(int node_id);
+    void fail_link_manually(int first_node_id, int second_node_id);
+
+    // Milestone 8: Heartbeat failure detection
+    void set_heartbeat_enabled(bool enabled);
+    bool is_heartbeat_enabled() const;
+    void set_heartbeat_interval(int interval_ms);
+    int get_heartbeat_interval() const;
+    void set_heartbeat_timeout(int timeout_ms);
+    int get_heartbeat_timeout() const;
+
+    void record_heartbeat(int node_id, int tick);
+    int get_last_heartbeat_tick(int node_id) const;
+    void silence_node_heartbeat(int node_id);
+    bool is_node_heartbeat_silenced(int node_id) const;
+    void resume_node_heartbeat(int node_id);
+
+    // Internal heartbeat step called during tick()
+    void process_heartbeats();
+
 private:
     model::NetworkGraph* graph_;
+    RoutingService* routing_service_;
     State state_;
     int current_tick_;
     Statistics statistics_;
     dsa::DynamicArray<InFlightPacket> in_flight_packets_;
     dsa::DynamicArray<model::Packet> delivered_packets_;
     dsa::DynamicArray<string> event_log_;
+
+    // Milestone 8 state
+    mt19937 rng_;
+    bool heartbeat_enabled_;
+    int heartbeat_interval_;
+    int heartbeat_timeout_;
+    dsa::HashMap<int, int> last_heartbeat_tick_;
+    dsa::HashMap<int, bool> silenced_heartbeats_;
 
     void log_event(string message);
     void drop_in_flight_at(int index, string reason);

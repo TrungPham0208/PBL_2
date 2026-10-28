@@ -7,10 +7,14 @@ using namespace std;
 namespace pbl {
 namespace services {
 
-// Milestone 6: Core logic — Chunking, checksums, and reconstruction
+// Milestone 6 & 7: Core logic — Chunking, checksums, reconstruction, and reliable transfer
 // Normalizing constructor: initialize member fields inside constructor body.
 TransferService::TransferService() {
     total_expected_chunks_ = 0;
+    ack_timeout_ms_ = DEFAULT_ACK_TIMEOUT;
+    max_attempts_ = DEFAULT_MAX_ATTEMPTS;
+    transfer_status_ = TransferStatus::IDLE;
+    statistics_ = TransferStatistics();
 }
 
 // Educational XOR checksum calculation over the byte payload.
@@ -75,6 +79,16 @@ model::Packet TransferService::create_ack_packet(int source_id, int destination_
 // Initializes the sender with file content and precomputed chunks
 void TransferService::init_sender(const string& file_content, int chunk_size) {
     sender_chunks_ = split_into_chunks(file_content, chunk_size);
+    chunk_progress_.clear();
+    for (int i = 0; i < sender_chunks_.size(); ++i) {
+        chunk_progress_.push_back(ChunkProgress(i));
+    }
+    if (sender_chunks_.empty()) {
+        transfer_status_ = TransferStatus::COMPLETED;
+    } else {
+        transfer_status_ = TransferStatus::IDLE;
+    }
+    statistics_ = TransferStatistics();
 }
 
 int TransferService::get_sender_chunk_count() const {
@@ -202,6 +216,185 @@ void TransferService::reset_receiver() {
 
 void TransferService::reset_sender() {
     sender_chunks_.clear();
+    chunk_progress_.clear();
+    transfer_status_ = TransferStatus::IDLE;
+    statistics_ = TransferStatistics();
+}
+
+// Milestone 7: Configuration
+void TransferService::set_ack_timeout(int timeout_ms) {
+    if (timeout_ms <= 0) {
+        throw invalid_argument("ack timeout must be positive");
+    }
+    ack_timeout_ms_ = timeout_ms;
+}
+
+int TransferService::get_ack_timeout() const {
+    return ack_timeout_ms_;
+}
+
+void TransferService::set_max_attempts(int max_attempts) {
+    if (max_attempts <= 0) {
+        throw invalid_argument("max attempts must be positive");
+    }
+    max_attempts_ = max_attempts;
+}
+
+int TransferService::get_max_attempts() const {
+    return max_attempts_;
+}
+
+// Milestone 7: Transfer progress and state queries
+TransferService::TransferStatus TransferService::get_transfer_status() const {
+    return transfer_status_;
+}
+
+bool TransferService::is_transfer_completed() const {
+    return transfer_status_ == TransferStatus::COMPLETED;
+}
+
+bool TransferService::is_transfer_failed() const {
+    return transfer_status_ == TransferStatus::FAILED;
+}
+
+bool TransferService::is_chunk_acknowledged(int sequence_number) const {
+    if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
+        return false;
+    }
+    return chunk_progress_[sequence_number].acknowledged;
+}
+
+int TransferService::get_chunk_attempts(int sequence_number) const {
+    if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
+        return 0;
+    }
+    return chunk_progress_[sequence_number].attempts;
+}
+
+TransferService::ChunkState TransferService::get_chunk_state(int sequence_number) const {
+    if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
+        return ChunkState::UNSENT;
+    }
+    return chunk_progress_[sequence_number].state;
+}
+
+const TransferService::ChunkProgress& TransferService::get_chunk_progress(int sequence_number) const {
+    if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
+        throw out_of_range("sequence number out of range");
+    }
+    return chunk_progress_[sequence_number];
+}
+
+const TransferService::TransferStatistics& TransferService::get_statistics() const {
+    return statistics_;
+}
+
+void TransferService::reset_statistics() {
+    statistics_ = TransferStatistics();
+}
+
+// Milestone 7: Invariant: Acknowledged chunks are not retransmitted unnecessarily after a route failure
+// Returns only the sequence numbers of chunks that have not yet been successfully acknowledged.
+dsa::DynamicArray<int> TransferService::get_unacknowledged_chunks() const {
+    dsa::DynamicArray<int> unacknowledged;
+    for (int i = 0; i < chunk_progress_.size(); ++i) {
+        if (!chunk_progress_[i].acknowledged) {
+            unacknowledged.push_back(i);
+        }
+    }
+    return unacknowledged;
+}
+
+// Milestone 7: Sender packet dispatch with attempt tracking
+// Invariant: Acknowledged chunks are not retransmitted unnecessarily.
+model::Packet TransferService::send_chunk(int sequence_number, int source_id, int destination_id, int current_tick) {
+    if (sequence_number < 0 || sequence_number >= sender_chunks_.size()) {
+        throw out_of_range("chunk sequence number out of range");
+    }
+
+    if (chunk_progress_[sequence_number].acknowledged) {
+        throw runtime_error("cannot send chunk: chunk is already acknowledged");
+    }
+
+    chunk_progress_[sequence_number].attempts++;
+    chunk_progress_[sequence_number].last_sent_tick = current_tick;
+    chunk_progress_[sequence_number].state = ChunkState::IN_FLIGHT;
+
+    statistics_.sent_count++;
+    if (chunk_progress_[sequence_number].attempts > 1) {
+        statistics_.retransmitted_count++;
+    }
+
+    if (transfer_status_ == TransferStatus::IDLE) {
+        transfer_status_ = TransferStatus::IN_PROGRESS;
+    }
+
+    return create_data_packet(source_id, destination_id, sender_chunks_[sequence_number]);
+}
+
+// Milestone 7: Invariant: Only a valid ACK for the matching chunk can mark that chunk delivered.
+// Invariant: A lost, corrupted, or missing DATA packet remains unacknowledged.
+bool TransferService::process_ack_packet(const model::Packet& packet) {
+    if (packet.get_type() != model::Packet::Type::ACK) {
+        return false;
+    }
+
+    int seq = packet.get_sequence_number();
+    if (seq < 0 || seq >= chunk_progress_.size()) {
+        return false;
+    }
+
+    // Duplicate ACK check: if already acknowledged, ignore duplicate ACK idempotently
+    if (chunk_progress_[seq].acknowledged) {
+        return false;
+    }
+
+    chunk_progress_[seq].acknowledged = true;
+    chunk_progress_[seq].state = ChunkState::ACKNOWLEDGED;
+    statistics_.acknowledged_count++;
+
+    if (statistics_.acknowledged_count == sender_chunks_.size()) {
+        transfer_status_ = TransferStatus::COMPLETED;
+    }
+
+    return true;
+}
+
+// Milestone 7: Invariant: Timeout checking and retry limits
+// Returns sequence numbers of chunks eligible for retransmission at current_tick.
+// Invariant: The transfer fails after the final allowed attempt (3 attempts) and preserves evidence in statistics.
+dsa::DynamicArray<int> TransferService::check_timeouts(int current_tick) {
+    dsa::DynamicArray<int> retransmit_list;
+
+    for (int seq = 0; seq < chunk_progress_.size(); ++seq) {
+        if (chunk_progress_[seq].acknowledged) {
+            continue;
+        }
+
+        if (chunk_progress_[seq].attempts == 0) {
+            continue;
+        }
+
+        if (chunk_progress_[seq].state != ChunkState::IN_FLIGHT) {
+            continue;
+        }
+
+        if (current_tick - chunk_progress_[seq].last_sent_tick >= ack_timeout_ms_) {
+            statistics_.timeout_count++;
+
+            if (chunk_progress_[seq].attempts < max_attempts_) {
+                chunk_progress_[seq].state = ChunkState::TIMED_OUT;
+                retransmit_list.push_back(seq);
+            } else {
+                // Maximum attempts reached without receiving an ACK
+                chunk_progress_[seq].state = ChunkState::FAILED;
+                transfer_status_ = TransferStatus::FAILED;
+                statistics_.failed_count++;
+            }
+        }
+    }
+
+    return retransmit_list;
 }
 
 }

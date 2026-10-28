@@ -276,6 +276,240 @@ void test_simulation_lifecycle() {
     assert(sim.get_in_flight_count() == 0);
 }
 
+// Milestone 8: Test deterministic defaults and packet loss behavior
+void test_loss_and_deterministic_defaults() {
+    pbl::model::NetworkGraph graph;
+    graph.add_client(1, "Client1");
+    graph.add_client(2, "Client2");
+    // Link with 0.0 default loss and corruption
+    graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
+
+    pbl::services::SimulationService sim;
+    sim.set_network_graph(&graph);
+    sim.start();
+
+    // Invariant: Default zero probabilities remain deterministic
+    pbl::model::Packet p1(pbl::model::Packet::Type::DATA, 1, 2, 1, "Payload1", 100);
+    assert(sim.send_packet(1, 2, p1));
+    sim.advance_ticks(10);
+    assert(sim.get_delivered_packets().size() == 1);
+    assert(sim.get_statistics().lost_count == 0);
+
+    // Now test manual loss injection on the link
+    sim.inject_link_loss(1, 2);
+    pbl::model::Packet p2(pbl::model::Packet::Type::DATA, 1, 2, 2, "Payload2", 100);
+    assert(sim.send_packet(1, 2, p2));
+
+    // Advance ticks to process dispatch
+    sim.advance_ticks(10);
+
+    // Packet p2 must have been lost, not delivered!
+    assert(sim.get_delivered_packets().size() == 1); // Still only p1 delivered
+    assert(sim.get_statistics().lost_count == 1);
+
+    // Review checkpoint: Event log must contain [PACKET_LOSS]
+    bool found_loss_log = false;
+    const pbl::dsa::DynamicArray<string>& logs = sim.get_event_log();
+    for (int i = 0; i < logs.size(); ++i) {
+        if (logs[i].find("[PACKET_LOSS]") != string::npos) {
+            found_loss_log = true;
+            break;
+        }
+    }
+    assert(found_loss_log);
+}
+
+// Milestone 8: Test manual packet corruption injection
+void test_corruption_injection_and_detection() {
+    pbl::model::NetworkGraph graph;
+    graph.add_client(1, "Client1");
+    graph.add_client(2, "Client2");
+    graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
+
+    pbl::services::SimulationService sim;
+    sim.set_network_graph(&graph);
+    sim.start();
+
+    string original_payload = "OriginalPayloadData";
+    int original_checksum = 0;
+    for (int i = 0; i < int(original_payload.size()); ++i) {
+        original_checksum ^= static_cast<unsigned char>(original_payload[i]);
+    }
+
+    // Packet created with valid payload and checksum
+    pbl::model::Packet p(pbl::model::Packet::Type::DATA, 1, 2, 10, original_payload, 100, original_checksum);
+
+    // Inject manual corruption on link
+    sim.inject_link_corruption(1, 2);
+    assert(sim.send_packet(1, 2, p));
+
+    sim.advance_ticks(10);
+
+    // Packet arrived, but its payload was corrupted
+    assert(sim.get_delivered_packets().size() == 1);
+    assert(sim.get_statistics().corrupted_count == 1);
+
+    pbl::model::Packet arrived = sim.get_delivered_packets()[0];
+    // Invariant: Corruption is detected before successful delivery acknowledgment
+    int arrived_checksum = 0;
+    string arrived_payload = arrived.get_payload();
+    for (int i = 0; i < int(arrived_payload.size()); ++i) {
+        arrived_checksum ^= static_cast<unsigned char>(arrived_payload[i]);
+    }
+    // Checksum of arrived payload does NOT match expected packet checksum
+    assert(arrived_checksum != arrived.get_checksum());
+
+    // Review checkpoint: Event log must contain [PACKET_CORRUPTION]
+    bool found_corruption_log = false;
+    const pbl::dsa::DynamicArray<string>& logs = sim.get_event_log();
+    for (int i = 0; i < logs.size(); ++i) {
+        if (logs[i].find("[PACKET_CORRUPTION]") != string::npos) {
+            found_corruption_log = true;
+            break;
+        }
+    }
+    assert(found_corruption_log);
+}
+
+// Milestone 8: Test manual failure takes effect immediately
+void test_manual_failure_immediate() {
+    pbl::model::NetworkGraph graph;
+    graph.add_client(1, "Client1");
+    graph.add_router(2, "Router2");
+    graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
+
+    pbl::services::SimulationService sim;
+    sim.set_network_graph(&graph);
+    sim.start();
+
+    sim.advance_ticks(15);
+    assert(graph.is_node_active(2));
+
+    // Invariant: Manual failure takes effect immediately
+    sim.fail_node_manually(2);
+    assert(!graph.is_node_active(2));
+    assert(sim.get_statistics().manual_failure_count == 1);
+
+    // Review checkpoint: Event log must contain [MANUAL_FAILURE]
+    bool found_manual_log = false;
+    const pbl::dsa::DynamicArray<string>& logs = sim.get_event_log();
+    for (int i = 0; i < logs.size(); ++i) {
+        if (logs[i].find("[MANUAL_FAILURE]") != string::npos) {
+            found_manual_log = true;
+            break;
+        }
+    }
+    assert(found_manual_log);
+}
+
+// Milestone 8: Test heartbeat monitoring and timeout failure detection
+void test_heartbeat_timeout_failure() {
+    pbl::model::NetworkGraph graph;
+    graph.add_client(1, "Client1");
+    graph.add_router(2, "Router2");
+    graph.add_router(3, "Router3");
+    graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
+    graph.add_link(2, 3, 100, 5, 0.0, 0.0, 10);
+
+    pbl::services::SimulationService sim;
+    sim.set_network_graph(&graph);
+    sim.set_heartbeat_interval(100);
+    sim.set_heartbeat_timeout(300);
+    sim.set_heartbeat_enabled(true);
+    sim.start();
+
+    // Advance 200 ms: Heartbeats emitted at ticks 100 and 200
+    sim.advance_ticks(200);
+    assert(graph.is_node_active(2));
+    assert(graph.is_node_active(3));
+    assert(sim.get_statistics().heartbeat_timeout_count == 0);
+
+    // Silence router 2 at tick 200 (stops emitting heartbeats)
+    sim.silence_node_heartbeat(2);
+
+    // Advance 299 ms from tick 200 (tick = 499)
+    // Invariant: Heartbeat failure changes node/link availability only AFTER the documented timeout (300 ms)
+    sim.advance_ticks(299);
+    assert(sim.get_current_tick() == 499);
+    assert(graph.is_node_active(2)); // Still active at tick 499 (299ms elapsed < 300ms)
+    assert(sim.get_statistics().heartbeat_timeout_count == 0);
+
+    // Advance 1 more tick to reach tick 500 (300ms elapsed since tick 200)
+    sim.advance_ticks(1);
+    assert(sim.get_current_tick() == 500);
+
+    // Router 2 must now have failed due to heartbeat timeout!
+    assert(!graph.is_node_active(2));
+    assert(graph.is_node_active(3)); // Router 3 continued beating and remains active
+    assert(sim.get_statistics().heartbeat_timeout_count == 1);
+
+    // Review checkpoint: Event log must contain [HEARTBEAT_TIMEOUT]
+    bool found_hb_timeout_log = false;
+    const pbl::dsa::DynamicArray<string>& logs = sim.get_event_log();
+    for (int i = 0; i < logs.size(); ++i) {
+        if (logs[i].find("[HEARTBEAT_TIMEOUT]") != string::npos) {
+            found_hb_timeout_log = true;
+            break;
+        }
+    }
+    assert(found_hb_timeout_log);
+}
+
+// Milestone 8: Review Checkpoint — verify event log clearly distinguishes all 4 events
+void test_review_checkpoint_event_log_distinction() {
+    pbl::model::NetworkGraph graph;
+    graph.add_client(1, "Client1");
+    graph.add_router(2, "Router2");
+    graph.add_router(3, "Router3");
+    graph.add_client(4, "Client4");
+    graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
+    graph.add_link(2, 3, 100, 5, 0.0, 0.0, 10);
+    graph.add_link(3, 4, 100, 5, 0.0, 0.0, 10);
+
+    pbl::services::SimulationService sim;
+    sim.set_network_graph(&graph);
+    sim.set_heartbeat_interval(100);
+    sim.set_heartbeat_timeout(300);
+    sim.set_heartbeat_enabled(true);
+    sim.start();
+
+    // 1. Trigger [PACKET_LOSS]
+    sim.inject_link_loss(1, 2);
+    sim.send_packet(1, 2, pbl::model::Packet(pbl::model::Packet::Type::DATA, 1, 2, 1, "test", 10));
+    sim.advance_ticks(10);
+
+    // 2. Trigger [PACKET_CORRUPTION]
+    sim.inject_link_corruption(2, 3);
+    sim.send_packet(2, 3, pbl::model::Packet(pbl::model::Packet::Type::DATA, 2, 3, 2, "test", 10));
+    sim.advance_ticks(10);
+
+    // 3. Trigger [MANUAL_FAILURE]
+    sim.fail_link_manually(3, 4);
+
+    // 4. Trigger [HEARTBEAT_TIMEOUT]
+    sim.silence_node_heartbeat(3);
+    sim.advance_ticks(350); // Will exceed 300 ms timeout for router 3
+
+    // Verify all 4 distinct events are present in log
+    bool has_loss = false;
+    bool has_corruption = false;
+    bool has_manual = false;
+    bool has_timeout = false;
+
+    const pbl::dsa::DynamicArray<string>& logs = sim.get_event_log();
+    for (int i = 0; i < logs.size(); ++i) {
+        if (logs[i].find("[PACKET_LOSS]") != string::npos) has_loss = true;
+        if (logs[i].find("[PACKET_CORRUPTION]") != string::npos) has_corruption = true;
+        if (logs[i].find("[MANUAL_FAILURE]") != string::npos) has_manual = true;
+        if (logs[i].find("[HEARTBEAT_TIMEOUT]") != string::npos) has_timeout = true;
+    }
+
+    assert(has_loss);
+    assert(has_corruption);
+    assert(has_manual);
+    assert(has_timeout);
+}
+
 } // namespace
 
 int main() {
@@ -285,6 +519,14 @@ int main() {
     test_link_serialization_busy_pipelining();
     test_failure_drops_packets();
     test_simulation_lifecycle();
-    cout << "All Milestone 5 queues and fixed-tick simulation tests passed successfully!" << endl;
+
+    // Milestone 8 tests
+    test_loss_and_deterministic_defaults();
+    test_corruption_injection_and_detection();
+    test_manual_failure_immediate();
+    test_heartbeat_timeout_failure();
+    test_review_checkpoint_event_log_distinction();
+
+    cout << "All Milestone 5 and Milestone 8 simulation, loss, corruption, and failure detection tests passed successfully!" << endl;
     return 0;
 }

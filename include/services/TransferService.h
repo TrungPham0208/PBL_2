@@ -38,6 +38,67 @@ public:
         }
     };
 
+    // Milestone 7: Core logic — ACKs, timeout, retransmission, and retry limits
+    enum class ChunkState {
+        UNSENT,
+        IN_FLIGHT,
+        TIMED_OUT,
+        ACKNOWLEDGED,
+        FAILED
+    };
+
+    enum class TransferStatus {
+        IDLE,
+        IN_PROGRESS,
+        COMPLETED,
+        FAILED
+    };
+
+    // Tracking metadata for each individual chunk at the sender
+    struct ChunkProgress {
+        int sequence_number;
+        ChunkState state;
+        int attempts;
+        int last_sent_tick;
+        bool acknowledged;
+
+        ChunkProgress() {
+            sequence_number = -1;
+            state = ChunkState::UNSENT;
+            attempts = 0;
+            last_sent_tick = -1;
+            acknowledged = false;
+        }
+
+        ChunkProgress(int seq) {
+            sequence_number = seq;
+            state = ChunkState::UNSENT;
+            attempts = 0;
+            last_sent_tick = -1;
+            acknowledged = false;
+        }
+    };
+
+    // Statistics tracking for file transfer progress and failure evidence
+    struct TransferStatistics {
+        int sent_count;
+        int acknowledged_count;
+        int retransmitted_count;
+        int timeout_count;
+        int failed_count;
+
+        TransferStatistics() {
+            sent_count = 0;
+            acknowledged_count = 0;
+            retransmitted_count = 0;
+            timeout_count = 0;
+            failed_count = 0;
+        }
+    };
+
+    static const int DEFAULT_ACK_TIMEOUT = 100; // 100 ms per SPEC.md
+    static const int DEFAULT_MAX_ATTEMPTS = 3;  // 3 attempts max per SPEC.md
+
     TransferService();
     // TransferService does not own dynamically allocated heap memory,
     // so no custom destructor is required.
@@ -64,6 +125,38 @@ public:
     const Chunk& get_sender_chunk(int sequence_number) const;
     const dsa::DynamicArray<Chunk>& get_all_sender_chunks() const;
 
+    // Milestone 7: Configuration
+    void set_ack_timeout(int timeout_ms);
+    int get_ack_timeout() const;
+    void set_max_attempts(int max_attempts);
+    int get_max_attempts() const;
+
+    // Milestone 7: Transfer progress and state queries
+    TransferStatus get_transfer_status() const;
+    bool is_transfer_completed() const;
+    bool is_transfer_failed() const;
+    bool is_chunk_acknowledged(int sequence_number) const;
+    int get_chunk_attempts(int sequence_number) const;
+    ChunkState get_chunk_state(int sequence_number) const;
+    const ChunkProgress& get_chunk_progress(int sequence_number) const;
+    const TransferStatistics& get_statistics() const;
+    void reset_statistics();
+
+    // Milestone 7: Invariant: Acknowledged chunks are not retransmitted unnecessarily after a route failure
+    dsa::DynamicArray<int> get_unacknowledged_chunks() const;
+
+    // Milestone 7: Sender packet dispatch with attempt tracking
+    model::Packet send_chunk(int sequence_number, int source_id, int destination_id, int current_tick);
+
+    // Milestone 7: Invariant: Only a valid ACK for the matching chunk can mark that chunk delivered
+    // Invariant: A lost, corrupted, or missing DATA packet remains unacknowledged
+    bool process_ack_packet(const model::Packet& packet);
+
+    // Milestone 7: Invariant: Timeout checking and retry limits
+    // Returns sequence numbers of chunks eligible for retransmission at current_tick.
+    // Invariant: The transfer fails after the final allowed attempt (3 attempts) and preserves evidence in statistics.
+    dsa::DynamicArray<int> check_timeouts(int current_tick);
+
     // Receiver state management and ordered chunk storage
     void init_receiver(int total_chunks);
     bool receive_chunk_packet(const model::Packet& packet);
@@ -88,6 +181,13 @@ private:
     int total_expected_chunks_;
     dsa::HashMap<int, Chunk> received_chunks_;
     dsa::DynamicArray<int> received_sequences_;
+
+    // Milestone 7 state
+    int ack_timeout_ms_;
+    int max_attempts_;
+    TransferStatus transfer_status_;
+    dsa::DynamicArray<ChunkProgress> chunk_progress_;
+    TransferStatistics statistics_;
 };
 
 }

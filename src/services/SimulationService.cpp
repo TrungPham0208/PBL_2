@@ -1,5 +1,6 @@
 #include <bits/stdc++.h>
 
+#include "services/RoutingService.h"
 #include "services/SimulationService.h"
 
 using namespace std;
@@ -7,12 +8,17 @@ using namespace std;
 namespace pbl {
 namespace services {
 
-// Milestone 5: Core logic — Queues and fixed-tick simulation
+// Milestone 5, 8 & 9: Core logic — Queues, fixed-tick simulation, loss, failure detection, and rerouting
 // Constructor initializes simulator fields in body to keep syntax beginner-friendly.
 SimulationService::SimulationService() {
     graph_ = nullptr;
+    routing_service_ = nullptr;
     state_ = State::STOPPED;
     current_tick_ = 0;
+    heartbeat_enabled_ = false;
+    heartbeat_interval_ = DEFAULT_HEARTBEAT_INTERVAL;
+    heartbeat_timeout_ = DEFAULT_FAILURE_TIMEOUT;
+    rng_.seed(12345);
 }
 
 void SimulationService::set_network_graph(model::NetworkGraph* graph) {
@@ -23,8 +29,26 @@ model::NetworkGraph* SimulationService::get_network_graph() const {
     return graph_;
 }
 
+// Milestone 9: Routing service attachment
+void SimulationService::set_routing_service(RoutingService* routing) {
+    routing_service_ = routing;
+}
+
+RoutingService* SimulationService::get_routing_service() const {
+    return routing_service_;
+}
+
 void SimulationService::start() {
     state_ = State::RUNNING;
+    if (graph_ != nullptr) {
+        dsa::DynamicArray<int> router_ids = graph_->get_router_ids();
+        for (int i = 0; i < router_ids.size(); ++i) {
+            int id = router_ids[i];
+            if (!last_heartbeat_tick_.contains(id)) {
+                last_heartbeat_tick_.put(id, current_tick_);
+            }
+        }
+    }
     log_event("[SIMULATION] Started at tick " + to_string(current_tick_));
 }
 
@@ -49,12 +73,16 @@ void SimulationService::reset() {
     in_flight_packets_.clear();
     delivered_packets_.clear();
     event_log_.clear();
+    last_heartbeat_tick_.clear();
+    silenced_heartbeats_.clear();
+    rng_.seed(12345);
 
     if (graph_ != nullptr) {
         const dsa::DynamicArray<model::Link*>& links = graph_->get_all_links();
         for (int i = 0; i < links.size(); ++i) {
             links[i]->clear_queue();
             links[i]->set_busy_until_tick(0);
+            links[i]->clear_injections();
         }
     }
     log_event("[SIMULATION] Reset to tick 0");
@@ -159,6 +187,9 @@ void SimulationService::tick() {
     // 1. Advance the simulation clock by 1 ms
     current_tick_++;
 
+    // Milestone 8: Process heartbeats and failure timeouts
+    process_heartbeats();
+
     // 2. Check for failure-affected in-flight packets and drop them
     for (int i = 0; i < in_flight_packets_.size(); ++i) {
         int u = in_flight_packets_[i].from_node_id;
@@ -192,12 +223,38 @@ void SimulationService::tick() {
                 continue;
             }
 
-            // Packet successfully reached its target for this hop
-            delivered_packets_.push_back(arrived.packet);
-            statistics_.delivered_count++;
-            log_event("[DELIVERED] Tick " + to_string(current_tick_) + ": Packet (seq=" +
-                      to_string(arrived.packet.get_sequence_number()) + ") arrived at node " +
-                      to_string(arrived.to_node_id));
+            // Check whether packet reached its final destination or requires forwarding
+            if (arrived.to_node_id == arrived.packet.get_destination_id() || routing_service_ == nullptr) {
+                // Packet successfully reached its target for this hop / final destination
+                delivered_packets_.push_back(arrived.packet);
+                statistics_.delivered_count++;
+                log_event("[DELIVERED] Tick " + to_string(current_tick_) + ": Packet (seq=" +
+                          to_string(arrived.packet.get_sequence_number()) + ") arrived at node " +
+                          to_string(arrived.to_node_id));
+            } else {
+                // Milestone 9: Packet reached an intermediate router node: forward along current best route
+                bool forwarded = false;
+                RoutingService::Route next_route = routing_service_->find_route(*graph_, arrived.to_node_id, arrived.packet.get_destination_id());
+                if (next_route.found && next_route.path.size() >= 2) {
+                    int next_hop = next_route.path[1];
+                    forwarded = send_packet(arrived.to_node_id, next_hop, arrived.packet);
+                    if (forwarded) {
+                        log_event("[FORWARD] Tick " + to_string(current_tick_) + ": Router " +
+                                  to_string(arrived.to_node_id) + " forwarded packet (seq=" +
+                                  to_string(arrived.packet.get_sequence_number()) + ") to next hop " +
+                                  to_string(next_hop));
+                    }
+                }
+
+                if (!forwarded) {
+                    statistics_.dropped_count++;
+                    statistics_.failure_drop_count++;
+                    log_event("[DROP] Packet (seq=" + to_string(arrived.packet.get_sequence_number()) +
+                              ") dropped at intermediate router " + to_string(arrived.to_node_id) +
+                              ": no usable route to destination " +
+                              to_string(arrived.packet.get_destination_id()));
+                }
+            }
         }
     }
 
@@ -224,9 +281,23 @@ void SimulationService::tick() {
         int from_id = packet.get_source_id();
         int to_id = packet.get_destination_id();
 
-        // If endpoints are not directly equal to link endpoints (e.g. multi-hop forwarding),
-        // determine the immediate hop direction based on link connects
-        if (!link->connects(from_id, to_id)) {
+        // Determine hop direction along undirected link
+        if (link->get_second_node_id() == packet.get_destination_id()) {
+            from_id = link->get_first_node_id();
+            to_id = link->get_second_node_id();
+        } else if (link->get_first_node_id() == packet.get_destination_id()) {
+            from_id = link->get_second_node_id();
+            to_id = link->get_first_node_id();
+        } else if (routing_service_ != nullptr) {
+            RoutingService::Route r_from_first = routing_service_->find_route(*graph_, link->get_first_node_id(), packet.get_destination_id());
+            if (r_from_first.found && r_from_first.get_next_hop() == link->get_second_node_id()) {
+                from_id = link->get_first_node_id();
+                to_id = link->get_second_node_id();
+            } else {
+                from_id = link->get_second_node_id();
+                to_id = link->get_first_node_id();
+            }
+        } else {
             from_id = link->get_first_node_id();
             to_id = link->get_second_node_id();
         }
@@ -238,6 +309,52 @@ void SimulationService::tick() {
         int tx_time = calculate_transmission_time(packet_size, bandwidth);
         // Link stays busy serializing this packet on the wire
         link->set_busy_until_tick(current_tick_ + tx_time);
+
+        // Milestone 8: Check for packet loss (manual injection or configured random probability)
+        bool is_lost = false;
+        if (link->should_inject_loss()) {
+            is_lost = true;
+        } else if (link->get_loss_probability() > 0.0) {
+            double prob = generate_random_probability();
+            if (prob < link->get_loss_probability()) {
+                is_lost = true;
+            }
+        }
+
+        if (is_lost) {
+            statistics_.dropped_count++;
+            statistics_.lost_count++;
+            log_event("[PACKET_LOSS] Tick " + to_string(current_tick_) + ": Packet (seq=" +
+                      to_string(packet.get_sequence_number()) + ") lost on link (" +
+                      to_string(from_id) + " -> " + to_string(to_id) + ")");
+            continue; // Packet dropped, does NOT enter in-flight transit
+        }
+
+        // Milestone 8: Check for packet corruption (manual injection or configured random probability)
+        bool is_corrupted = false;
+        if (link->should_inject_corruption()) {
+            is_corrupted = true;
+        } else if (link->get_corruption_probability() > 0.0) {
+            double prob = generate_random_probability();
+            if (prob < link->get_corruption_probability()) {
+                is_corrupted = true;
+            }
+        }
+
+        if (is_corrupted) {
+            // Corrupt packet payload (flip bits of first byte)
+            string corrupted_payload = packet.get_payload();
+            if (!corrupted_payload.empty()) {
+                corrupted_payload[0] ^= 0xFF;
+            } else {
+                corrupted_payload = "CORRUPTED";
+            }
+            packet.set_payload(corrupted_payload);
+            statistics_.corrupted_count++;
+            log_event("[PACKET_CORRUPTION] Tick " + to_string(current_tick_) + ": Packet (seq=" +
+                      to_string(packet.get_sequence_number()) + ") corrupted on link (" +
+                      to_string(from_id) + " -> " + to_string(to_id) + ")");
+        }
 
         int arrival_tick = current_tick_ + tx_time + latency;
 
@@ -353,6 +470,161 @@ void SimulationService::drop_in_flight_at(int index, string reason) {
 
 void SimulationService::log_event(string message) {
     event_log_.push_back(message);
+}
+
+// Milestone 8: Random seed for deterministic simulation experiments
+void SimulationService::set_random_seed(unsigned int seed) {
+    rng_.seed(seed);
+}
+
+double SimulationService::generate_random_probability() {
+    uniform_real_distribution<double> dist(0.0, 1.0);
+    return dist(rng_);
+}
+
+// Milestone 8: Manual packet loss and corruption injection
+void SimulationService::inject_link_loss(int from_node_id, int to_node_id) {
+    if (graph_ != nullptr) {
+        model::Link* link = graph_->get_link(from_node_id, to_node_id);
+        if (link != nullptr) {
+            link->inject_loss_next();
+        }
+    }
+}
+
+void SimulationService::inject_link_corruption(int from_node_id, int to_node_id) {
+    if (graph_ != nullptr) {
+        model::Link* link = graph_->get_link(from_node_id, to_node_id);
+        if (link != nullptr) {
+            link->inject_corruption_next();
+        }
+    }
+}
+
+// Milestone 8: Manual node and link failures (takes effect immediately)
+void SimulationService::fail_node_manually(int node_id) {
+    log_event("[MANUAL_FAILURE] Tick " + to_string(current_tick_) +
+              ": Node " + to_string(node_id) + " failed manually");
+    statistics_.manual_failure_count++;
+    process_node_failure(node_id);
+}
+
+void SimulationService::fail_link_manually(int first_node_id, int second_node_id) {
+    log_event("[MANUAL_FAILURE] Tick " + to_string(current_tick_) +
+              ": Link (" + to_string(first_node_id) + " - " + to_string(second_node_id) +
+              ") failed manually");
+    statistics_.manual_failure_count++;
+    process_link_failure(first_node_id, second_node_id);
+}
+
+// Milestone 8: Heartbeat failure detection
+void SimulationService::set_heartbeat_enabled(bool enabled) {
+    heartbeat_enabled_ = enabled;
+    if (enabled && graph_ != nullptr) {
+        dsa::DynamicArray<int> router_ids = graph_->get_router_ids();
+        for (int i = 0; i < router_ids.size(); ++i) {
+            int id = router_ids[i];
+            if (!last_heartbeat_tick_.contains(id)) {
+                last_heartbeat_tick_.put(id, current_tick_);
+            }
+        }
+    }
+}
+
+bool SimulationService::is_heartbeat_enabled() const {
+    return heartbeat_enabled_;
+}
+
+void SimulationService::set_heartbeat_interval(int interval_ms) {
+    if (interval_ms <= 0) {
+        throw invalid_argument("heartbeat interval must be positive");
+    }
+    heartbeat_interval_ = interval_ms;
+}
+
+int SimulationService::get_heartbeat_interval() const {
+    return heartbeat_interval_;
+}
+
+void SimulationService::set_heartbeat_timeout(int timeout_ms) {
+    if (timeout_ms <= 0) {
+        throw invalid_argument("heartbeat timeout must be positive");
+    }
+    heartbeat_timeout_ = timeout_ms;
+}
+
+int SimulationService::get_heartbeat_timeout() const {
+    return heartbeat_timeout_;
+}
+
+void SimulationService::record_heartbeat(int node_id, int tick) {
+    last_heartbeat_tick_.put(node_id, tick);
+}
+
+int SimulationService::get_last_heartbeat_tick(int node_id) const {
+    if (last_heartbeat_tick_.contains(node_id)) {
+        return last_heartbeat_tick_.at(node_id);
+    }
+    return 0;
+}
+
+void SimulationService::silence_node_heartbeat(int node_id) {
+    silenced_heartbeats_.put(node_id, true);
+}
+
+bool SimulationService::is_node_heartbeat_silenced(int node_id) const {
+    if (silenced_heartbeats_.contains(node_id)) {
+        return silenced_heartbeats_.at(node_id);
+    }
+    return false;
+}
+
+void SimulationService::resume_node_heartbeat(int node_id) {
+    if (silenced_heartbeats_.contains(node_id)) {
+        silenced_heartbeats_.put(node_id, false);
+    }
+    record_heartbeat(node_id, current_tick_);
+}
+
+// Internal heartbeat step called during tick()
+// Invariant: Heartbeat failure changes node/link availability only after the documented timeout,
+// unless a manual failure is requested.
+void SimulationService::process_heartbeats() {
+    if (!heartbeat_enabled_ || graph_ == nullptr) {
+        return;
+    }
+
+    dsa::DynamicArray<int> router_ids = graph_->get_router_ids();
+
+    // 1. Periodic heartbeat emission
+    if (heartbeat_interval_ > 0 && (current_tick_ % heartbeat_interval_ == 0)) {
+        for (int i = 0; i < router_ids.size(); ++i) {
+            int node_id = router_ids[i];
+            if (graph_->is_node_active(node_id)) {
+                if (!is_node_heartbeat_silenced(node_id)) {
+                    record_heartbeat(node_id, current_tick_);
+                    log_event("[HEARTBEAT] Tick " + to_string(current_tick_) +
+                              ": Router " + to_string(node_id) + " emitted heartbeat");
+                }
+            }
+        }
+    }
+
+    // 2. Heartbeat timeout detection
+    for (int i = 0; i < router_ids.size(); ++i) {
+        int node_id = router_ids[i];
+        if (graph_->is_node_active(node_id)) {
+            int last_tick = get_last_heartbeat_tick(node_id);
+            if (current_tick_ - last_tick >= heartbeat_timeout_) {
+                // Heartbeat failure detected after documented timeout
+                log_event("[HEARTBEAT_TIMEOUT] Tick " + to_string(current_tick_) +
+                          ": Router " + to_string(node_id) + " timed out after " +
+                          to_string(heartbeat_timeout_) + "ms without heartbeat");
+                statistics_.heartbeat_timeout_count++;
+                process_node_failure(node_id);
+            }
+        }
+    }
 }
 
 }
