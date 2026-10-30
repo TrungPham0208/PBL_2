@@ -10,9 +10,7 @@ using namespace std;
 namespace pbl {
 namespace model {
 
-// Milestone 2 & Milestone 5: Link owns the shared state for both directions.
-// Milestone 5: Bounded packet queue with priority scheduling (ACK & ROUTE_PROBE > HEARTBEAT & ROUTE_UPDATE > DATA)
-// and FIFO ordering for equal-priority packets.
+
 class Link {
 public:
     Link(int first_node_id, int second_node_id, int bandwidth,

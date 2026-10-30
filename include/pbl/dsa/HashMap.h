@@ -11,23 +11,7 @@ using namespace std;
 
 template <typename Key, typename Value>
 class HashMap {
-public:
-    // Create a hash map and use 16 buckets when the caller gives no value.
-    HashMap(int bucket_count = 16);
-
-    // Release all dynamically allocated entries when the map is destroyed.
-    ~HashMap();
-
-    void put(const Key& key, const Value& value);
-    Value& at(const Key& key);
-    const Value& at(const Key& key) const;
-    bool contains(const Key& key) const;
-    bool remove(const Key& key);
-    void clear();
-    int size() const;
-    bool empty() const;
-
-private:
+    private:
     struct Entry {
         Key key;
         Value value;
@@ -41,14 +25,24 @@ private:
     int bucket_index(Key key) const;
     Entry* find_entry(const Key& key);
     const Entry* find_entry(const Key& key) const;
+public:
+    HashMap(int bucket_count = 16);
+    ~HashMap();
+    void put(const Key& key, const Value& value);
+    Value& at(const Key& key);
+    const Value& at(const Key& key) const;
+    bool contains(const Key& key) const;
+    bool remove(const Key& key);
+    void clear();
+    int size() const;
+    bool empty() const;
+
 };
 
 template <typename Key, typename Value>
 HashMap<Key, Value>::HashMap(int bucket_count) {
-    // Allocate one pointer slot for each requested bucket.
     buckets_ = DynamicArray<Entry*>(bucket_count);
     bucket_count_ = bucket_count;
-    // A map with no buckets cannot store or find any key.
     if (bucket_count == 0) {
         throw invalid_argument("hash map requires at least one bucket");
     }

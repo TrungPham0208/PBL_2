@@ -16,7 +16,6 @@ public:
         NodeId destination;
         EdgeValue value;
     };
-
     void add_node(const NodeId& node);
     bool remove_node(const NodeId& node);
     void add_undirected_edge(const NodeId& first, const NodeId& second, const EdgeValue& value);
@@ -36,6 +35,7 @@ private:
 
     int node_index(const NodeId& node) const;
     void remove_directed_edge(Vertex& vertex, const NodeId& destination);
+
 };
 
 template <typename NodeId, typename EdgeValue>

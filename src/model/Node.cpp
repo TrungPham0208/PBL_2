@@ -1,4 +1,5 @@
 #include "model/Node.h"
+#include <stdexcept>
 
 using namespace std;
 

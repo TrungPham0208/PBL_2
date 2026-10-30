@@ -11,15 +11,7 @@ using namespace std;
 
 template <typename T>
 class PriorityQueue {
-public:
-    void push(const T& value, int priority);
-    T pop();
-    const T& top() const; // max
-    bool empty() const;
-    int size() const;
-    void clear();
-
-private:
+ private:
     struct Entry {
         T value;
         int priority;
@@ -32,6 +24,13 @@ private:
     bool higher(const Entry& left, const Entry& right);
     void sift_up(int index);
     void sift_down(int index);
+public:
+    void push(const T& value, int priority);
+    T pop();
+    const T& top() const; // max
+    bool empty() const;
+    int size() const;
+    void clear();
 };
 
 template <typename T>

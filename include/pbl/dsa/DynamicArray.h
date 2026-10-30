@@ -10,6 +10,12 @@ using namespace std;
 
 template <typename T>
 class DynamicArray {
+private:
+    T* data_;
+    int size_; // số hần tử đang có mặt trong mảng 
+    int capacity_; // tổng số ô nhớ xin cấp phát trên heap
+    void ensure_capacity(int required); // đảm bảo có đủ chỗ 
+    void check_index(int index); // kiểm tra tính hợp lệ của index
 public:
     DynamicArray(int capacity = 0);
     DynamicArray(const DynamicArray& other);
@@ -19,14 +25,7 @@ public:
     void push_back(T value);
     void pop_back();
 
-    // DynamicArray<int> values;
-    // values.at(0) = 10;
     T& at(int index);
-
-    // Used when the array itself is read-only:
-    // const DynamicArray<int> values;
-    // values.at(0);        // allowed
-    // values.at(0) = 10;   // blocked
     const T& at(int index) const;
 
     T& operator[](int index);
@@ -38,16 +37,7 @@ public:
     int capacity() const;
     bool empty();
     bool empty() const;
-
     void clear();
-
-private:
-    T* data_;
-    int size_;
-    int capacity_;
-
-    void ensure_capacity(int required);
-    void check_index(int index);
 };
 
 template <typename T>

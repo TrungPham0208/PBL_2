@@ -12,6 +12,12 @@ namespace dsa {
 
 template <typename T>
 class Queue {
+    private:
+    DynamicArray<T> slots_;
+    int capacity_;
+    int head_;
+    int tail_;
+    int size_;
 public:
     Queue(int capacity = 1);
 
@@ -23,12 +29,6 @@ public:
     int size() const;
     int capacity() const;
 
-private:
-    DynamicArray<T> slots_;
-    int capacity_;
-    int head_;
-    int tail_;
-    int size_;
 };
 
 template <typename T>

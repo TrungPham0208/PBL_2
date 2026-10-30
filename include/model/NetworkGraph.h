@@ -16,10 +16,7 @@ using namespace std;
 namespace pbl {
 namespace model {
 
-// Milestone 3: Core logic — Network graph representation and topology validation.
-// This class manages the collection of nodes and undirected links that make up the network.
-// It enforces undirected consistency, prevents dangling and duplicate connections,
-// and validates topology health (isolated nodes, unreachable pairs, missing alternative routes).
+
 class NetworkGraph {
 public:
     // Result object summarizing topology health and any warnings discovered.
