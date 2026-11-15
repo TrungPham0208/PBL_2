@@ -150,12 +150,35 @@ private:
     QProgressBar* progress_transfer_;
     QLabel* lbl_transfer_status_;
     QTableWidget* table_chunks_;
+    QTimer* xfer_timer_;
+    bool xfer_step_active_;
+    int xfer_step_;
+    int xfer_src_id_;
+    int xfer_dst_id_;
+    int xfer_chunk_size_;
+    std::string xfer_payload_;
+    QLabel* lbl_transfer_live_step_;
+    QPushButton* btn_xfer_prev_;
+    QPushButton* btn_xfer_next_;
+    QPushButton* btn_xfer_auto_;
 
     // UI Widgets: Routing & Queues
     QLabel* lbl_active_route_;
     QLabel* lbl_route_cost_;
+    QLabel* lbl_route_breakdown_;
     QTableWidget* table_routing_;
     QTableWidget* table_queues_;
+
+    // UI Widgets: Demonstrations animated stepper
+    QTimer* demo_timer_;
+    int demo_mode_;
+    int demo_step_;
+    int demo_failed_router_;
+    dsa::DynamicArray<int> demo_alt_route_;
+    QLabel* lbl_demo_live_step_;
+    QPushButton* btn_demo_prev_;
+    QPushButton* btn_demo_next_;
+    QPushButton* btn_demo_auto_;
 
     // UI Widgets: Event Log & Statistics
     QTableWidget* table_event_log_;
@@ -164,6 +187,23 @@ private:
 
     // Helper UI setup routines
     void setup_ui();
+    void apply_modern_theme();
+    void setup_initial_startup_topology();
+    void start_animated_demo1();
+    void start_animated_demo2();
+    void apply_demo_step(int step);
+    void on_demo_prev_step();
+    void on_demo_next_step();
+    void on_demo_toggle_auto();
+    void update_demo_nav_buttons();
+    void on_demo_timer_tick();
+    void start_guided_transfer(int src_id, int dst_id, const std::string& payload, int chunk_size);
+    void apply_xfer_step(int step);
+    void on_xfer_prev_step();
+    void on_xfer_next_step();
+    void on_xfer_toggle_auto();
+    void update_xfer_nav_buttons();
+    void on_xfer_timer_tick();
     QWidget* create_top_toolbar();
     QWidget* create_sidebar_tabs();
     QWidget* create_bottom_panel();
