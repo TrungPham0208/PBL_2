@@ -136,12 +136,26 @@ add_test(NAME pbl2_failure_recovery COMMAND pbl2_failure_recovery_tests)
 add_test(NAME pbl2_storage COMMAND pbl2_storage_tests)
 
 if (Qt6_FOUND)
-    add_executable(pbl2_simulator
-        src/main.cpp
+    set(PBL2_UI_SOURCES
         src/ui/MainWindow.cpp
         src/ui/TopologyCanvas.cpp
+        src/ui/UiTheme.cpp
+        src/ui/TopologyPanel.cpp
+        src/ui/TransferPanel.cpp
+        src/ui/FaultInspectorPanel.cpp
+        src/ui/RoutingPanel.cpp
+        src/ui/DemoPanel.cpp
         include/ui/MainWindow.h
         include/ui/TopologyCanvas.h
+        include/ui/UiTheme.h
+        include/ui/TopologyPanel.h
+        include/ui/TransferPanel.h
+        include/ui/FaultInspectorPanel.h
+        include/ui/RoutingPanel.h
+        include/ui/DemoPanel.h
+    )
+
+    set(PBL2_CORE_SOURCES
         src/model/Node.cpp
         src/model/Client.cpp
         src/model/Router.cpp
@@ -153,25 +167,19 @@ if (Qt6_FOUND)
         src/services/TransferService.cpp
         src/services/FileStorageService.cpp
     )
+
+    add_executable(pbl2_simulator
+        src/main.cpp
+        ${PBL2_UI_SOURCES}
+        ${PBL2_CORE_SOURCES}
+    )
     target_include_directories(pbl2_simulator PRIVATE . include)
     target_link_libraries(pbl2_simulator PRIVATE Qt6::Widgets)
 
     add_executable(pbl2_ui_tests
         tests/test_ui_wiring.cpp
-        src/ui/MainWindow.cpp
-        src/ui/TopologyCanvas.cpp
-        include/ui/MainWindow.h
-        include/ui/TopologyCanvas.h
-        src/model/Node.cpp
-        src/model/Client.cpp
-        src/model/Router.cpp
-        src/model/Packet.cpp
-        src/model/Link.cpp
-        src/model/NetworkGraph.cpp
-        src/services/RoutingService.cpp
-        src/services/SimulationService.cpp
-        src/services/TransferService.cpp
-        src/services/FileStorageService.cpp
+        ${PBL2_UI_SOURCES}
+        ${PBL2_CORE_SOURCES}
     )
     target_include_directories(pbl2_ui_tests PRIVATE . include)
     target_link_libraries(pbl2_ui_tests PRIVATE Qt6::Widgets)
@@ -180,20 +188,8 @@ if (Qt6_FOUND)
 
     add_executable(pbl2_demonstration_tests
         tests/test_demonstration.cpp
-        src/ui/MainWindow.cpp
-        src/ui/TopologyCanvas.cpp
-        include/ui/MainWindow.h
-        include/ui/TopologyCanvas.h
-        src/model/Node.cpp
-        src/model/Client.cpp
-        src/model/Router.cpp
-        src/model/Packet.cpp
-        src/model/Link.cpp
-        src/model/NetworkGraph.cpp
-        src/services/RoutingService.cpp
-        src/services/SimulationService.cpp
-        src/services/TransferService.cpp
-        src/services/FileStorageService.cpp
+        ${PBL2_UI_SOURCES}
+        ${PBL2_CORE_SOURCES}
     )
     target_include_directories(pbl2_demonstration_tests PRIVATE . include)
     target_link_libraries(pbl2_demonstration_tests PRIVATE Qt6::Widgets)

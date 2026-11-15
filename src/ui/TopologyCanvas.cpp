@@ -1,18 +1,27 @@
-#include <bits/stdc++.h>
+#include "ui/TopologyCanvas.h"
 
-#include <QPainter>
-#include <QPainterPath>
-#include <QMouseEvent>
-#include <QFont>
-#include <QFontMetrics>
-#include <QPen>
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <QBrush>
 #include <QColor>
-#include <QRadialGradient>
-#include <QLinearGradient>
+#include <QContextMenuEvent>
 #include <QCursor>
-
-#include "ui/TopologyCanvas.h"
+#include <QFont>
+#include <QFontMetrics>
+#include <QLinearGradient>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPen>
+#include <QPushButton>
+#include <QRadialGradient>
+#include <QWheelEvent>
 
 using namespace std;
 
@@ -34,6 +43,10 @@ TopologyCanvas::TopologyCanvas(QWidget* parent) : QWidget(parent) {
     selected_link_b_ = -1;
     dragging_node_id_ = -1;
     user_dragged_ = false;
+    zoom_factor_ = 1.0;
+    pan_offset_ = QPointF(0.0, 0.0);
+    is_panning_ = false;
+    pan_did_move_ = false;
 
     hovered_node_id_ = -1;
     hovered_link_a_ = -1;
@@ -43,6 +56,16 @@ TopologyCanvas::TopologyCanvas(QWidget* parent) : QWidget(parent) {
 
     setMinimumSize(450, 400);
     setMouseTracking(true);
+
+    btn_fit_view_ = new QPushButton("Fit / Reset View", this);
+    btn_fit_view_->setCursor(Qt::PointingHandCursor);
+    btn_fit_view_->setToolTip("Reset zoom (1.0x), pan, and auto-arrange nodes");
+    btn_fit_view_->setStyleSheet(
+        "QPushButton { background-color: rgba(15, 23, 42, 210); color: #38bdf8; "
+        "border: 1px solid #334155; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #1e293b; border-color: #38bdf8; }");
+    connect(btn_fit_view_, &QPushButton::clicked, this, &TopologyCanvas::reset_view);
+    position_overlay_controls();
 
     // Smooth animation timer (~30 FPS) for pulsing glow, active route flow, and moving packets
     anim_timer_ = new QTimer(this);
@@ -326,11 +349,15 @@ void TopologyCanvas::draw_grid(QPainter& painter) {
     ambient.setColorAt(1.0, QColor(13, 17, 28, 0));
     painter.fillRect(rect(), ambient);
 
-    // Subtle CAD Grid dots
+    // Subtle CAD Grid dots (anchored to pan_offset_ for visual movement feedback)
     painter.setPen(QColor(51, 65, 85, 90));
     const int grid_step = 28;
-    for (int x = 0; x < width(); x += grid_step) {
-        for (int y = 0; y < height(); y += grid_step) {
+    int ox = static_cast<int>(std::fmod(pan_offset_.x(), static_cast<double>(grid_step)));
+    int oy = static_cast<int>(std::fmod(pan_offset_.y(), static_cast<double>(grid_step)));
+    if (ox < 0) ox += grid_step;
+    if (oy < 0) oy += grid_step;
+    for (int x = ox; x < width(); x += grid_step) {
+        for (int y = oy; y < height(); y += grid_step) {
             painter.drawPoint(x, y);
         }
     }
@@ -839,6 +866,10 @@ void TopologyCanvas::paintEvent(QPaintEvent* event) {
     // Ensure node positions exist
     update_layout();
 
+    painter.save();
+    painter.translate(pan_offset_);
+    painter.scale(zoom_factor_, zoom_factor_);
+
     // 2. Links
     draw_links(painter);
 
@@ -851,28 +882,60 @@ void TopologyCanvas::paintEvent(QPaintEvent* event) {
     // 4. Nodes
     draw_nodes(painter);
 
-    // 5. Canvas HUD & Legend
+    painter.restore();
+
+    // 5. Canvas HUD & Legend (screen space)
     draw_hud(painter);
 }
 
+QPointF TopologyCanvas::screen_to_world(const QPointF& screen_pos) const {
+    return (screen_pos - pan_offset_) / zoom_factor_;
+}
+
+void TopologyCanvas::position_overlay_controls() {
+    if (btn_fit_view_) {
+        btn_fit_view_->adjustSize();
+        btn_fit_view_->move(max(12, width() - btn_fit_view_->width() - 12), 12);
+    }
+}
+
+void TopologyCanvas::reset_view() {
+    zoom_factor_ = 1.0;
+    pan_offset_ = QPointF(0.0, 0.0);
+    reset_layout();
+}
+
 void TopologyCanvas::mousePressEvent(QMouseEvent* event) {
+    QPointF world_pos = screen_to_world(event->position());
+
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+        is_panning_ = true;
+        pan_did_move_ = false;
+        pan_start_pos_ = event->position();
+        pan_last_pos_ = event->position();
+        if (event->button() == Qt::MiddleButton) {
+            setCursor(Qt::ClosedHandCursor);
+        }
+        event->accept();
+        return;
+    }
+
     if (event->button() == Qt::LeftButton) {
-        QPointF pos = event->position();
-        int clicked_node = find_node_at(pos);
+        int clicked_node = find_node_at(world_pos);
 
         if (clicked_node != -1) {
             selected_node_id_ = clicked_node;
             selected_link_a_ = -1;
             selected_link_b_ = -1;
             dragging_node_id_ = clicked_node;
-            drag_offset_ = node_positions_[clicked_node] - pos;
+            drag_offset_ = node_positions_[clicked_node] - world_pos;
             emit node_selected(clicked_node);
             update();
             return;
         }
 
         // Check if a link was clicked
-        pair<int, int> clicked_link = find_link_at(pos, 10.0);
+        pair<int, int> clicked_link = find_link_at(world_pos, 10.0 / zoom_factor_);
         if (clicked_link.first != -1) {
             selected_node_id_ = -1;
             selected_link_a_ = clicked_link.first;
@@ -882,33 +945,48 @@ void TopologyCanvas::mousePressEvent(QMouseEvent* event) {
             return;
         }
 
-        // Clicked on empty canvas
+        // Clicked on empty canvas: deselect and allow left-drag panning
         selected_node_id_ = -1;
         selected_link_a_ = -1;
         selected_link_b_ = -1;
+        is_panning_ = true;
+        pan_did_move_ = false;
+        pan_start_pos_ = event->position();
+        pan_last_pos_ = event->position();
         emit canvas_clicked();
         update();
+        event->accept();
     }
 }
 
 void TopologyCanvas::mouseMoveEvent(QMouseEvent* event) {
-    QPointF pos = event->position();
+    if (is_panning_ && (event->buttons() & (Qt::LeftButton | Qt::MiddleButton | Qt::RightButton))) {
+        if (!pan_did_move_ && (event->position() - pan_start_pos_).manhattanLength() >= 4.0) {
+            pan_did_move_ = true;
+        }
+        QPointF delta = event->position() - pan_last_pos_;
+        pan_offset_ += delta;
+        pan_last_pos_ = event->position();
+        setCursor(Qt::ClosedHandCursor);
+        update();
+        event->accept();
+        return;
+    }
+
+    QPointF world_pos = screen_to_world(event->position());
 
     if (dragging_node_id_ != -1 && (event->buttons() & Qt::LeftButton)) {
         setCursor(Qt::ClosedHandCursor);
         user_dragged_ = true;
-        QPointF new_pos = pos + drag_offset_;
-        // Keep within widget boundaries
-        new_pos.setX(max(32.0, min((double)width() - 32.0, new_pos.x())));
-        new_pos.setY(max(32.0, min((double)height() - 32.0, new_pos.y())));
+        QPointF new_pos = world_pos + drag_offset_;
         node_positions_[dragging_node_id_] = new_pos;
         update();
         return;
     }
 
     // Interactive Hover Tracking
-    int hovered_node = find_node_at(pos);
-    pair<int, int> hovered_link = find_link_at(pos, 8.0);
+    int hovered_node = find_node_at(world_pos);
+    pair<int, int> hovered_link = find_link_at(world_pos, 8.0 / zoom_factor_);
 
     bool changed = false;
     if (hovered_node != hovered_node_id_) {
@@ -933,9 +1011,16 @@ void TopologyCanvas::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TopologyCanvas::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+        is_panning_ = false;
+    }
+    if (event->button() == Qt::MiddleButton || event->button() == Qt::RightButton) {
+        setCursor(Qt::ArrowCursor);
+    }
     if (event->button() == Qt::LeftButton) {
         dragging_node_id_ = -1;
-        if (find_node_at(event->position()) != -1) {
+        QPointF world_pos = screen_to_world(event->position());
+        if (find_node_at(world_pos) != -1) {
             setCursor(Qt::PointingHandCursor);
         } else {
             setCursor(Qt::ArrowCursor);
@@ -943,8 +1028,114 @@ void TopologyCanvas::mouseReleaseEvent(QMouseEvent* event) {
     }
 }
 
+void TopologyCanvas::wheelEvent(QWheelEvent* event) {
+    const double scale_step = (event->angleDelta().y() > 0) ? 1.12 : (1.0 / 1.12);
+    double new_zoom = max(0.4, min(2.5, zoom_factor_ * scale_step));
+    if (abs(new_zoom - zoom_factor_) < 1e-4) return;
+
+    QPointF mouse_screen = event->position();
+    QPointF mouse_world_before = screen_to_world(mouse_screen);
+    zoom_factor_ = new_zoom;
+    pan_offset_ = mouse_screen - mouse_world_before * zoom_factor_;
+    update();
+    event->accept();
+}
+
+void TopologyCanvas::contextMenuEvent(QContextMenuEvent* event) {
+    if (pan_did_move_) {
+        pan_did_move_ = false;
+        event->accept();
+        return;
+    }
+    if (graph_ == nullptr) return;
+    QPointF world_pos = screen_to_world(QPointF(event->pos()));
+    int node_id = find_node_at(world_pos);
+    if (node_id != -1) {
+        selected_node_id_ = node_id;
+        selected_link_a_ = -1;
+        selected_link_b_ = -1;
+        emit node_selected(node_id);
+        update();
+
+        model::Node* node = graph_->get_node(node_id);
+        if (!node) return;
+        QMenu menu(this);
+        QString fail_label = node->is_active() ? "Fail Node (Go Offline)" : "Recover Node (Go Online)";
+        QAction* act_toggle = menu.addAction(fail_label);
+        connect(act_toggle, &QAction::triggered, this, [this, node_id]() {
+            emit toggle_node_failure_requested(node_id);
+        });
+
+        QMenu* connect_menu = menu.addMenu("Connect Link to...");
+        const dsa::DynamicArray<int>& all_ids = graph_->get_node_ids();
+        bool has_targets = false;
+        for (int i = 0; i < all_ids.size(); ++i) {
+            int other_id = all_ids[i];
+            if (other_id == node_id || graph_->get_link(node_id, other_id) != nullptr) continue;
+            model::Node* other = graph_->get_node(other_id);
+            QString target_name = other ? QString("%1 (ID %2)").arg(QString::fromStdString(other->get_name())).arg(other_id)
+                                        : QString("Node %1").arg(other_id);
+            QAction* act_conn = connect_menu->addAction(target_name);
+            connect(act_conn, &QAction::triggered, this, [this, node_id, other_id]() {
+                emit connect_link_requested(node_id, other_id);
+            });
+            has_targets = true;
+        }
+        if (!has_targets) {
+            QAction* empty_act = connect_menu->addAction("(All nodes already connected)");
+            empty_act->setEnabled(false);
+        }
+
+        menu.addSeparator();
+        QAction* act_del = menu.addAction("Delete Node");
+        connect(act_del, &QAction::triggered, this, [this, node_id]() {
+            emit delete_node_requested(node_id);
+        });
+        menu.exec(event->globalPos());
+        return;
+    }
+
+    pair<int, int> link = find_link_at(world_pos, 10.0 / zoom_factor_);
+    if (link.first != -1) {
+        selected_node_id_ = -1;
+        selected_link_a_ = link.first;
+        selected_link_b_ = link.second;
+        emit link_selected(link.first, link.second);
+        update();
+
+        const model::Link* l = graph_->get_link(link.first, link.second);
+        QMenu menu(this);
+        QString fail_label = (l && l->is_failed()) ? "Recover Link" : "Fail Link";
+        QAction* act_toggle = menu.addAction(fail_label);
+        connect(act_toggle, &QAction::triggered, this, [this, link]() {
+            emit toggle_link_failure_requested(link.first, link.second);
+        });
+        QAction* act_drop = menu.addAction("Force Drop Next Packet");
+        connect(act_drop, &QAction::triggered, this, [this, link]() {
+            emit inject_link_loss_requested(link.first, link.second);
+        });
+        QAction* act_corrupt = menu.addAction("Force Corrupt Next Packet");
+        connect(act_corrupt, &QAction::triggered, this, [this, link]() {
+            emit inject_link_corruption_requested(link.first, link.second);
+        });
+        menu.addSeparator();
+        QAction* act_del = menu.addAction("Delete Link");
+        connect(act_del, &QAction::triggered, this, [this, link]() {
+            emit delete_link_requested(link.first, link.second);
+        });
+        menu.exec(event->globalPos());
+        return;
+    }
+
+    QMenu menu(this);
+    QAction* act_fit = menu.addAction("Fit / Reset View");
+    connect(act_fit, &QAction::triggered, this, &TopologyCanvas::reset_view);
+    menu.exec(event->globalPos());
+}
+
 void TopologyCanvas::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
+    position_overlay_controls();
     if (!user_dragged_) {
         node_positions_.clear();
         update_layout();

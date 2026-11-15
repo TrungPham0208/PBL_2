@@ -1,22 +1,36 @@
 #pragma once
 
-#include <bits/stdc++.h>
-#include <QWidget>
-#include <QPainter>
-#include <QMouseEvent>
-#include <QResizeEvent>
-#include <QPointF>
-#include <QTimer>
-#include <QVector>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
 
+#ifdef emit
+#pragma push_macro("emit")
+#undef emit
+#define PBL_RESTORE_EMIT_TC
+#endif
 #include "model/NetworkGraph.h"
 #include "model/Node.h"
 #include "model/Link.h"
 #include "pbl/dsa/DynamicArray.h"
 #include "services/RoutingService.h"
 #include "services/SimulationService.h"
+#ifdef PBL_RESTORE_EMIT_TC
+#pragma pop_macro("emit")
+#undef PBL_RESTORE_EMIT_TC
+#endif
 
-using namespace std;
+#include <QContextMenuEvent>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPointF>
+#include <QPushButton>
+#include <QResizeEvent>
+#include <QTimer>
+#include <QVector>
+#include <QWheelEvent>
+#include <QWidget>
 
 namespace pbl {
 namespace ui {
@@ -43,10 +57,11 @@ public:
     void set_selected_link(int node_a, int node_b);
 
     int get_selected_node() const;
-    pair<int, int> get_selected_link() const;
+    std::pair<int, int> get_selected_link() const;
 
     void update_layout();
     void reset_layout();
+    void reset_view();
     void set_node_position(int node_id, double x, double y);
 
     // Visual-only step-by-step route exploration overlay for Demonstrations
@@ -63,12 +78,21 @@ signals:
     void node_selected(int node_id);
     void link_selected(int node_a, int node_b);
     void canvas_clicked();
+    void toggle_node_failure_requested(int node_id);
+    void connect_link_requested(int node_a, int node_b);
+    void delete_node_requested(int node_id);
+    void toggle_link_failure_requested(int node_a, int node_b);
+    void inject_link_loss_requested(int node_a, int node_b);
+    void inject_link_corruption_requested(int node_a, int node_b);
+    void delete_link_requested(int node_a, int node_b);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private:
@@ -82,12 +106,22 @@ private:
     int selected_link_b_;
 
     // Node canvas positions (node_id -> QPointF)
-    map<int, QPointF> node_positions_;
+    std::map<int, QPointF> node_positions_;
 
-    // Mouse drag tracking
+    // Mouse drag & pan/zoom tracking
     int dragging_node_id_;
     QPointF drag_offset_;
     bool user_dragged_;
+    double zoom_factor_;
+    QPointF pan_offset_;
+    bool is_panning_;
+    bool pan_did_move_;
+    QPointF pan_start_pos_;
+    QPointF pan_last_pos_;
+    QPushButton* btn_fit_view_;
+
+    QPointF screen_to_world(const QPointF& screen_pos) const;
+    void position_overlay_controls();
 
     // Visual-only probe exploration edges
     QVector<ProbeEdge> probe_edges_;
