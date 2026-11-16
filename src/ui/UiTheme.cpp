@@ -1,10 +1,43 @@
 #include "ui/UiTheme.h"
 
+#include <QColor>
+#include <QDir>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QPolygonF>
+
 namespace pbl {
 namespace ui {
 
+static QString ensure_arrow_icon(bool up) {
+    QString filename = up ? "pbl2_arrow_up.png" : "pbl2_arrow_down.png";
+    QString path = QDir::cleanPath(QDir::tempPath() + "/" + filename);
+
+    QPixmap pm(12, 12);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("#cbd5e1"));
+
+    QPolygonF poly;
+    if (up) {
+        poly << QPointF(6.0, 2.5) << QPointF(10.5, 8.5) << QPointF(1.5, 8.5);
+    } else {
+        poly << QPointF(1.5, 3.5) << QPointF(10.5, 3.5) << QPointF(6.0, 9.5);
+    }
+    p.drawPolygon(poly);
+    p.end();
+
+    pm.save(path, "PNG");
+    return QDir::fromNativeSeparators(path);
+}
+
 QString build_dark_stylesheet() {
-    return QStringLiteral(R"(
+    QString up_url = ensure_arrow_icon(true);
+    QString down_url = ensure_arrow_icon(false);
+    QString qss = QStringLiteral(R"(
         QMainWindow, QWidget {
             background-color: #0b0f19;
             color: #f1f5f9;
@@ -92,11 +125,54 @@ QString build_dark_stylesheet() {
         QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
             border: 1px solid #38bdf8;
         }
+        QSpinBox, QDoubleSpinBox {
+            padding-right: 24px;
+        }
+        QSpinBox::up-button, QDoubleSpinBox::up-button {
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 22px;
+            border-left: 1px solid #334155;
+            border-bottom: 1px solid #1f293d;
+            border-top-right-radius: 5px;
+            background-color: #172033;
+        }
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            width: 22px;
+            border-left: 1px solid #334155;
+            border-bottom-right-radius: 5px;
+            background-color: #172033;
+        }
+        QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+        QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+            background-color: #25334d;
+        }
+        QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
+        QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
+            background-color: #0f172a;
+        }
+        QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+            image: url(__UP_ARROW__);
+            width: 10px;
+            height: 10px;
+        }
+        QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+            image: url(__DOWN_ARROW__);
+            width: 10px;
+            height: 10px;
+        }
         QComboBox::drop-down {
             subcontrol-origin: padding;
             subcontrol-position: top right;
-            width: 20px;
+            width: 22px;
             border-left: 1px solid #334155;
+        }
+        QComboBox::down-arrow {
+            image: url(__DOWN_ARROW__);
+            width: 10px;
+            height: 10px;
         }
         QComboBox QAbstractItemView {
             background-color: #0b0f19;
@@ -238,6 +314,9 @@ QString build_dark_stylesheet() {
             border-radius: 4px;
         }
     )");
+    qss.replace("__UP_ARROW__", up_url);
+    qss.replace("__DOWN_ARROW__", down_url);
+    return qss;
 }
 
 }  // namespace ui
