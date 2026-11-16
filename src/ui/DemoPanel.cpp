@@ -20,19 +20,20 @@ DemoPanel::DemoPanel(QWidget* parent) : QWidget(parent) {
     QGroupBox* demo_box = new QGroupBox("End-to-End Demonstrations", content);
     QVBoxLayout* d_layout = new QVBoxLayout(demo_box);
 
-    QPushButton* btn_probe = new QPushButton("Send Hop-by-Hop Route Probe", demo_box);
+    QPushButton* btn_probe = new QPushButton("Start / Reset Hop-by-Hop Route Probe", demo_box);
+    btn_probe->setToolTip("Send or restart a route probe to inspect the active hop-by-hop path.");
     btn_probe->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8b5cf6, stop:1 #7c3aed); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px;");
     connect(btn_probe, &QPushButton::clicked, this, &DemoPanel::probeRequested);
     d_layout->addWidget(btn_probe);
 
-    QPushButton* btn_demo1 = new QPushButton("Run Preset Scenario 1: Dynamic Recovery & Rerouting", demo_box);
-    btn_demo1->setToolTip("Preset 6-node scenario demonstrating neighbor probing, failure detection (X), and Dijkstra rerouting.");
+    QPushButton* btn_demo1 = new QPushButton("Start / Reset Scenario 1: Dynamic Recovery & Rerouting", demo_box);
+    btn_demo1->setToolTip("Start or reset Preset Scenario 1 (6-node neighbor probing, failure detection, and Dijkstra rerouting).");
     btn_demo1->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3b82f6, stop:1 #1d4ed8); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 10px; font-size: 12px;");
     connect(btn_demo1, &QPushButton::clicked, this, &DemoPanel::scenario1Requested);
     d_layout->addWidget(btn_demo1);
 
-    QPushButton* btn_demo2 = new QPushButton("Run Preset Scenario 2: Controlled Retry-Limit Failure", demo_box);
-    btn_demo2->setToolTip("Preset 6-node scenario severing both last-hop links to Client2 to prove 3-retry abort.");
+    QPushButton* btn_demo2 = new QPushButton("Start / Reset Scenario 2: Controlled Retry-Limit Failure", demo_box);
+    btn_demo2->setToolTip("Start or reset Preset Scenario 2 (severing both last-hop links to Client2 to prove 3-retry abort).");
     btn_demo2->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ef4444, stop:1 #b91c1c); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 10px; font-size: 12px;");
     connect(btn_demo2, &QPushButton::clicked, this, &DemoPanel::scenario2Requested);
     d_layout->addWidget(btn_demo2);

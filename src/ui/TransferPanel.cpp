@@ -46,7 +46,8 @@ TransferPanel::TransferPanel(QWidget* parent) : QWidget(parent) {
     edit_payload_->setMaximumHeight(60);
     setup_grid->addWidget(edit_payload_, 3, 1);
 
-    btn_start_transfer_ = new QPushButton("Start Reliable File Transfer", setup_box);
+    btn_start_transfer_ = new QPushButton("Start / Reset File Transfer", setup_box);
+    btn_start_transfer_->setToolTip("Start a new guided file transfer, or reset and replay from Step 1/6.");
     btn_start_transfer_->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #10b981, stop:1 #059669); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px; font-size: 12px;");
     connect(btn_start_transfer_, &QPushButton::clicked, this, [this]() {
         if (combo_src_client_->count() == 0 || combo_dst_client_->count() == 0) {
@@ -64,7 +65,7 @@ TransferPanel::TransferPanel(QWidget* parent) : QWidget(parent) {
     setup_grid->addWidget(btn_start_transfer_, 4, 0, 1, 2);
 
     lbl_transfer_live_step_ = new QLabel(
-        "Click 'Start Reliable File Transfer' to step through Chunking, Dijkstra Routing, DATA Transmission, and ACK Verification.",
+        "Click 'Start / Reset File Transfer' to watch how a file is split into small pieces, routed through the fastest path, delivered, and confirmed step by step.",
         setup_box);
     lbl_transfer_live_step_->setWordWrap(true);
     lbl_transfer_live_step_->setStyleSheet("padding: 8px; background-color: #0f172a; border: 1px solid #38bdf8; border-left: 4px solid #38bdf8; border-radius: 6px; color: #e2e8f0; font-size: 11px; font-weight: bold;");
@@ -165,6 +166,10 @@ int TransferPanel::selected_src_id() const {
 
 int TransferPanel::selected_dst_id() const {
     return combo_dst_client_->count() > 0 ? combo_dst_client_->currentData().toInt() : -1;
+}
+
+std::string TransferPanel::payload_text() const {
+    return edit_payload_->toPlainText().toStdString();
 }
 
 void TransferPanel::reset_display() {

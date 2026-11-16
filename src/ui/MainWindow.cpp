@@ -163,23 +163,57 @@ QWidget* MainWindow::create_top_toolbar() {
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(8);
 
-    btn_start_ = new QPushButton("Start", bar_box);
+    btn_start_ = new QPushButton("Start / Reset", bar_box);
+    btn_start_->setToolTip("Start simulation playback (auto-launches a transfer if idle, or resets if finished).");
     btn_start_->setStyleSheet("background-color: #10b981; color: white; font-weight: bold; border: none; border-radius: 6px; padding: 6px 14px;");
     btn_pause_ = new QPushButton("Pause", bar_box);
+    btn_pause_->setToolTip("Pause the simulation clock.");
     btn_pause_->setStyleSheet("background-color: #f59e0b; color: white; font-weight: bold; border: none; border-radius: 6px; padding: 6px 14px;");
     btn_resume_ = new QPushButton("Resume", bar_box);
+    btn_resume_->setToolTip("Resume simulation playback from the current tick.");
     btn_resume_->setStyleSheet("background-color: #06b6d4; color: white; font-weight: bold; border: none; border-radius: 6px; padding: 6px 14px;");
     btn_reset_ = new QPushButton("Reset", bar_box);
+    btn_reset_->setToolTip("Stop simulation, reset Tick to 0 ms, and clear in-flight packets.");
     btn_reset_->setStyleSheet("background-color: #ef4444; color: white; font-weight: bold; border: none; border-radius: 6px; padding: 6px 14px;");
     btn_step1_ = new QPushButton("Step +1ms", bar_box);
+    btn_step1_->setToolTip("Advance the simulation clock by exactly 1 ms.");
     btn_step10_ = new QPushButton("Step +10ms", bar_box);
+    btn_step10_->setToolTip("Advance the simulation clock by 10 ms.");
 
-    connect(btn_start_, &QPushButton::clicked, this, [this]() { handle_start_simulation(); });
+    connect(btn_start_, &QPushButton::clicked, this, [this]() {
+        if (transfer_chunks_.empty() || transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
+            int src_id = transfer_panel_->selected_src_id();
+            int dst_id = transfer_panel_->selected_dst_id();
+            if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
+                handle_start_file_transfer(src_id, dst_id, transfer_panel_->payload_text(), transfer_panel_->chunk_size());
+                return;
+            }
+        }
+        handle_start_simulation();
+    });
     connect(btn_pause_, &QPushButton::clicked, this, [this]() { handle_pause_simulation(); });
     connect(btn_resume_, &QPushButton::clicked, this, [this]() { handle_resume_simulation(); });
     connect(btn_reset_, &QPushButton::clicked, this, [this]() { handle_reset_simulation(); });
-    connect(btn_step1_, &QPushButton::clicked, this, [this]() { handle_advance_ticks(1); });
-    connect(btn_step10_, &QPushButton::clicked, this, [this]() { handle_advance_ticks(10); });
+    connect(btn_step1_, &QPushButton::clicked, this, [this]() {
+        if (transfer_chunks_.empty()) {
+            int src_id = transfer_panel_->selected_src_id();
+            int dst_id = transfer_panel_->selected_dst_id();
+            if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
+                initialize_transfer_session(src_id, dst_id, transfer_panel_->payload_text(), transfer_panel_->chunk_size(), false);
+            }
+        }
+        handle_advance_ticks(1);
+    });
+    connect(btn_step10_, &QPushButton::clicked, this, [this]() {
+        if (transfer_chunks_.empty()) {
+            int src_id = transfer_panel_->selected_src_id();
+            int dst_id = transfer_panel_->selected_dst_id();
+            if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
+                initialize_transfer_session(src_id, dst_id, transfer_panel_->payload_text(), transfer_panel_->chunk_size(), false);
+            }
+        }
+        handle_advance_ticks(10);
+    });
 
     QLabel* lbl_speed = new QLabel("Speed:", bar_box);
     lbl_speed->setStyleSheet("color: #94a3b8; font-weight: bold;");
@@ -319,7 +353,40 @@ QWidget* MainWindow::create_sidebar_tabs() {
     connect(fault_panel_, &FaultInspectorPanel::injectCorruptionRequested, this, &MainWindow::handle_inject_corruption_selected);
 
     // Tab 5 wiring
-    connect(demo_panel_, &DemoPanel::probeRequested, this, &MainWindow::handle_send_route_probe);
+    connect(demo_panel_, &DemoPanel::probeRequested, this, [this]() {
+        int src_id = transfer_panel_->selected_src_id();
+        int dst_id = transfer_panel_->selected_dst_id();
+        if (src_id == -1 || dst_id == -1) {
+            if (active_source_id_ == -1 || active_destination_id_ == -1) return;
+            src_id = active_source_id_;
+            dst_id = active_destination_id_;
+        } else {
+            active_source_id_ = src_id;
+            active_destination_id_ = dst_id;
+        }
+        services::RoutingService::Route r = routing_service_.find_route(graph_, src_id, dst_id);
+        if (!r.found || r.path.size() < 2) {
+            demo_panel_->set_live_step_text("Route Probe failed: No reachable path between selected clients.");
+            append_log_entry(simulation_service_.get_current_tick(), "Probe", "Route Probe failed: No valid path", "");
+            return;
+        }
+        std::string route_trace;
+        for (int i = 0; i < r.path.size(); ++i) {
+            route_trace += std::to_string(r.path[i]);
+            if (i < r.path.size() - 1) route_trace += "->";
+        }
+        canvas_->clear_probe_visuals();
+        canvas_->set_active_route(r.path);
+        update_route_display();
+        model::Packet probe_pkt(model::Packet::Type::ROUTE_PROBE, src_id, dst_id, r.hop_count(), route_trace, 16);
+        simulation_service_.send_packet_along_route(r.path, probe_pkt);
+        append_log_entry(simulation_service_.get_current_tick(), "Probe",
+                         "Dispatched Hop-by-Hop ROUTE_PROBE (" + std::to_string(src_id) + " -> " + std::to_string(dst_id) + ")",
+                         "Expected Trace: " + route_trace);
+        demo_watch_stage_ = 20;
+        demo_panel_->set_live_step_text(QString("Route Probe In-Flight: Tracing hop-by-hop path %1...").arg(QString::fromStdString(route_trace)));
+        handle_start_simulation();
+    });
     connect(demo_panel_, &DemoPanel::scenario1Requested, this, [this]() {
         if (confirm_preset_demo_if_modified()) start_animated_demo1();
     });
@@ -476,14 +543,14 @@ void MainWindow::on_simulation_timer_tick() {
                 xfer_watch_stage_ = 0;
                 handle_pause_simulation();
                 transfer_panel_->set_guided_step_text(
-                    "Step 3/6 (Forward DATA Arrived): DATA packet traveled Client -> Routers -> Destination! Receiver verified XOR checksum and emitted ACK.");
+                    "Step 3/6 — Data Arrived: The data packet reached the Destination! The receiver checked its verification code (no damage) and is ready to send a receipt (ACK) back.");
             }
         } else if (xfer_watch_stage_ == 2) {
             if (stats.acknowledged_count > 0 || transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
                 xfer_watch_stage_ = 0;
                 handle_pause_simulation();
                 transfer_panel_->set_guided_step_text(
-                    "Step 4/6 (Reverse ACK Returned): ACK traveled Destination -> Routers -> Sender! Chunk #0 is now ACKNOWLEDGED.");
+                    "Step 4/6 — Delivery Confirmed: The Sender got the receipt (ACK) back! Piece #0 is now marked ACKNOWLEDGED (safely delivered).");
             }
         } else if (xfer_watch_stage_ == 3) {
             if (transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
@@ -491,10 +558,10 @@ void MainWindow::on_simulation_timer_tick() {
                 handle_pause_simulation();
                 if (transfer_service_.is_transfer_completed()) {
                     transfer_panel_->set_guided_step_text(
-                        "Step 5/6 (All Chunks Delivered): Live pipeline completed 100%! Click 'Next >' for final summary.");
+                        "Step 5/6 — All Pieces Sent: Every data piece has been delivered and confirmed! Click 'Next >' for the final summary.");
                 } else {
                     transfer_panel_->set_guided_step_text(
-                        "Step 5/6 (Aborted): Transfer stopped due to unreachable destination or retry limit.");
+                        "Step 5/6 — Stopped: Transfer stopped because the destination could not be reached.");
                 }
             }
         }
@@ -516,6 +583,40 @@ void MainWindow::on_simulation_timer_tick() {
                 demo_panel_->set_live_step_text(
                     "Step 6/7 (Reverse ACK): ACK returned Client2 -> ... -> Router3 -> Client1! Chunk #0 ACKNOWLEDGED.");
             }
+        }
+    }
+
+    if (demo_mode_ == 2 && demo_watch_stage_ != 0) {
+        if (demo_watch_stage_ == 10) {
+            if (simulation_service_.get_current_tick() >= 16 || simulation_service_.get_in_flight_packets().empty()) {
+                demo_watch_stage_ = 0;
+                handle_pause_simulation();
+                demo_panel_->set_live_step_text(
+                    "Step 1/4: DATA packet reached the last-hop router! Client2 connects via these 2 highlighted last-hop links.");
+            }
+        } else if (demo_watch_stage_ == 11) {
+            if (simulation_service_.get_current_tick() >= 35 || simulation_service_.get_in_flight_packets().empty()) {
+                demo_watch_stage_ = 0;
+                handle_pause_simulation();
+                demo_panel_->set_live_step_text(
+                    "Step 2/4: Both last-hop links are severed! DATA packet cannot reach Client2 and is dropped.");
+            }
+        } else if (demo_watch_stage_ == 12) {
+            if (transfer_service_.is_transfer_failed() || simulation_service_.get_current_tick() >= 150) {
+                demo_watch_stage_ = 0;
+                handle_pause_simulation();
+                demo_panel_->set_live_step_text(
+                    "Step 3/4: Unacknowledged DATA timed out and triggered automatic retransmission retries!");
+            }
+        }
+    }
+
+    if (demo_watch_stage_ == 20) {
+        if (simulation_service_.get_in_flight_packets().empty()) {
+            demo_watch_stage_ = 0;
+            handle_pause_simulation();
+            demo_panel_->set_live_step_text(
+                QString("Route Probe Arrived! Discovered path: %1").arg(QString::fromStdString(discovered_probe_path_)));
         }
     }
 }
@@ -1287,17 +1388,20 @@ void MainWindow::apply_demo_step(int step) {
         active_destination_id_ = 2;
         std::string payload = "Controlled Retry Limit Failure Test Payload";
         initialize_transfer_session(1, 2, payload, 64, false);
-        handle_advance_ticks(5);
 
         const dsa::DynamicArray<int>& neighbors = graph_.get_neighbors(2);
         if (demo_step_ == 0) {
+            handle_advance_ticks(1);
             QVector<TopologyCanvas::ProbeEdge> probes;
             for (int i = 0; i < neighbors.size(); ++i) {
                 probes.push_back({2, neighbors[i], 0, "Last-Hop Link"});
             }
             canvas_->set_probe_visuals(probes);
-            demo_panel_->set_live_step_text("Step 1/4: File transfer running to Client2. Client2 connects via these 2 last-hop links.");
+            demo_watch_stage_ = 10;
+            handle_start_simulation();
+            demo_panel_->set_live_step_text("Step 1/4: Sending DATA toward Client2 across the network (watching live travel)...");
         } else if (demo_step_ == 1) {
+            handle_advance_ticks(15);
             QVector<TopologyCanvas::ProbeEdge> probes;
             for (int i = 0; i < neighbors.size(); ++i) {
                 simulation_service_.fail_link_manually(2, neighbors[i]);
@@ -1305,15 +1409,19 @@ void MainWindow::apply_demo_step(int step) {
             }
             canvas_->set_probe_visuals(probes);
             update_route_display();
-            demo_panel_->set_live_step_text("Step 2/4: Both last-hop links to Client2 are severed -> Destination completely unreachable.");
+            demo_watch_stage_ = 11;
+            handle_start_simulation();
+            demo_panel_->set_live_step_text("Step 2/4: Both last-hop links to Client2 are severed while DATA is in flight -> Watching packet fail to cross...");
         } else if (demo_step_ == 2) {
+            handle_advance_ticks(15);
             for (int i = 0; i < neighbors.size(); ++i) {
                 simulation_service_.fail_link_manually(2, neighbors[i]);
             }
             canvas_->clear_probe_visuals();
             update_route_display();
-            handle_advance_ticks(120);
-            demo_panel_->set_live_step_text("Step 3/4: Unacknowledged packets time out and trigger automatic retransmission retries...");
+            demo_watch_stage_ = 12;
+            handle_start_simulation();
+            demo_panel_->set_live_step_text("Step 3/4: Watching unacknowledged packet time out and trigger automatic retries (1..3)...");
         } else {
             for (int i = 0; i < neighbors.size(); ++i) {
                 simulation_service_.fail_link_manually(2, neighbors[i]);
@@ -1329,7 +1437,7 @@ void MainWindow::apply_demo_step(int step) {
             }
             demo_panel_->set_live_step_text("Step 4/4 (Completed): Max retry limit (3) reached -> Transfer aborted safely with failure evidence.");
         }
-        if (was_auto && demo_step_ < 3 && demo_timer_) demo_timer_->start(2500);
+        if (was_auto && demo_step_ < 3 && demo_timer_) demo_timer_->start(3500);
         demo_panel_->update_nav_buttons(demo_mode_, demo_step_, 3, was_auto && demo_step_ < 3);
     }
 }
@@ -1402,7 +1510,7 @@ void MainWindow::apply_xfer_step(int step) {
     if (xfer_step_ == 0) {
         update_transfer_display();
         transfer_panel_->set_guided_step_text(
-            QString("Step 1/6 (Chunking & Checksum): Split payload into %1 chunk(s). Inspect the table below: State = UNSENT with byte Size and XOR Checksum.")
+            QString("Step 1/6 — Prepare Data: Your message is split into %1 small piece(s) (chunks), like numbered pages of a letter, so it travels safely. Each piece starts as UNSENT with a verification code (Checksum) to catch errors.")
                 .arg(transfer_chunks_.size()));
     } else if (xfer_step_ == 1) {
         QVector<TopologyCanvas::ProbeEdge> probes;
@@ -1419,10 +1527,10 @@ void MainWindow::apply_xfer_step(int step) {
         update_transfer_display();
         if (r.found) {
             transfer_panel_->set_guided_step_text(
-                QString("Step 2/6 (Dijkstra Routing): Selected lowest-cost path: %1 (Cost = %2).")
+                QString("Step 2/6 — Find Fastest Path: The network compares all roads and picks the quickest route: %1 (path score = %2, highlighted in green on the map).")
                     .arg(route_names).arg(r.total_cost, 0, 'f', 2));
         } else {
-            transfer_panel_->set_guided_step_text("Step 2/6 (Dijkstra Routing): No reachable path to destination.");
+            transfer_panel_->set_guided_step_text("Step 2/6 — No Path Found: There is no open road connecting the Sender to the Destination.");
         }
     } else if (xfer_step_ == 2) {
         canvas_->clear_probe_visuals();
@@ -1430,7 +1538,7 @@ void MainWindow::apply_xfer_step(int step) {
         xfer_watch_stage_ = 1;
         handle_start_simulation();
         transfer_panel_->set_guided_step_text(
-            "Step 3/6 (Forward DATA In-Flight): Watching DATA packet travel Client -> Routers -> Destination (State = IN_FLIGHT)...");
+            "Step 3/6 — Sending Data: Watch the glowing data packet travel from the Sender, through the Routers, to the Destination (State = IN_FLIGHT)...");
     } else if (xfer_step_ == 3) {
         canvas_->clear_probe_visuals();
         bool has_ack = false;
@@ -1451,10 +1559,10 @@ void MainWindow::apply_xfer_step(int step) {
             xfer_watch_stage_ = 2;
             handle_start_simulation();
             transfer_panel_->set_guided_step_text(
-                "Step 4/6 (Reverse ACK In-Flight): Watching ACK packet return Destination -> Routers -> Sender...");
+                "Step 4/6 — Confirming Delivery: Watch the green receipt packet (ACK) travel back from the Destination to the Sender...");
         } else {
             transfer_panel_->set_guided_step_text(
-                "Step 4/6 (Reverse ACK Returned): Receiver verified XOR checksum and ACK returned to Sender!");
+                "Step 4/6 — Delivery Confirmed: The Sender got the receipt (ACK) back! Piece #0 is now marked ACKNOWLEDGED (safely delivered).");
         }
     } else if (xfer_step_ == 4) {
         canvas_->clear_probe_visuals();
@@ -1470,10 +1578,10 @@ void MainWindow::apply_xfer_step(int step) {
             xfer_watch_stage_ = 3;
             handle_start_simulation();
             transfer_panel_->set_guided_step_text(
-                "Step 5/6 (Live Pipeline): Streaming remaining DATA & ACK packets across the network...");
+                "Step 5/6 — Sending Remaining Pieces: Sending and confirming any remaining data pieces across the network...");
         } else {
             transfer_panel_->set_guided_step_text(
-                "Step 5/6 (Live Pipeline): All chunks transmitted! Click 'Next >' for final reconstruction.");
+                "Step 5/6 — All Pieces Sent: Every data piece has been delivered and confirmed! Click 'Next >' for the final summary.");
         }
     } else {
         canvas_->clear_probe_visuals();
@@ -1483,10 +1591,10 @@ void MainWindow::apply_xfer_step(int step) {
         }
         if (transfer_service_.is_transfer_completed()) {
             transfer_panel_->set_guided_step_text(
-                "Step 6/6 (Completed 100%): All chunks ACKNOWLEDGED and file reconstructed with full integrity!");
+                "Step 6/6 — Complete (100%): All pieces are ACKNOWLEDGED and joined back together into the exact original message with zero errors!");
         } else {
             transfer_panel_->set_guided_step_text(
-                "Step 6/6 (Aborted): Transfer stopped due to unreachable destination or retry limit exceeded.");
+                "Step 6/6 — Stopped: The destination could not be reached after 3 retry attempts, so the transfer stopped safely.");
         }
     }
 

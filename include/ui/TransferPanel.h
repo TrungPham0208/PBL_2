@@ -41,6 +41,7 @@ public:
     int chunk_size() const;
     int selected_src_id() const;
     int selected_dst_id() const;
+    std::string payload_text() const;
 
     void reset_display();
     void set_transfer_status_in_progress();
