@@ -21,10 +21,11 @@ TopologyPanel::TopologyPanel(QWidget* parent) : QWidget(parent) {
     QGroupBox* gen_box = new QGroupBox("Random Topology Generator", content);
     QGridLayout* gen_grid = new QGridLayout(gen_box);
 
-    gen_grid->addWidget(new QLabel("Total Nodes:"), 0, 0);
+    gen_grid->addWidget(new QLabel("Total Routers:"), 0, 0);
     spin_node_count_ = new QSpinBox(gen_box);
-    spin_node_count_->setRange(2, 50);
-    spin_node_count_->setValue(6);
+    spin_node_count_->setRange(1, 50);
+    spin_node_count_->setValue(4);
+    spin_node_count_->setToolTip("Number of routers to generate (Total Nodes = Routers + Clients).");
     gen_grid->addWidget(spin_node_count_, 0, 1);
 
     gen_grid->addWidget(new QLabel("Client Count:"), 1, 0);
@@ -55,13 +56,14 @@ TopologyPanel::TopologyPanel(QWidget* parent) : QWidget(parent) {
         "• <b>Validate Topology:</b> Checks graph connectivity across all clients and detects isolated nodes.",
         gen_box);
     lbl_gen_hint->setWordWrap(true);
-    lbl_gen_hint->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #38bdf8; border-radius: 6px; color: #cbd5e1; font-size: 11px;");
+    lbl_gen_hint->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #38bdf8; border-radius: 6px; color: #cbd5e1; font-size: 13px;");
     gen_grid->addWidget(lbl_gen_hint, 4, 0, 1, 2);
 
     btn_generate_ = new QPushButton("Generate Reproducible Topology", gen_box);
     btn_generate_->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3b82f6, stop:1 #2563eb); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px;");
     connect(btn_generate_, &QPushButton::clicked, this, [this]() {
-        emit generateRequested(spin_node_count_->value(),
+        int total_nodes = spin_node_count_->value() + spin_client_count_->value();
+        emit generateRequested(total_nodes,
                                spin_client_count_->value(),
                                spin_density_->value(),
                                spin_seed_->value());
@@ -148,6 +150,13 @@ TopologyPanel::TopologyPanel(QWidget* parent) : QWidget(parent) {
     connect(btn_delete_selected_, &QPushButton::clicked, this, &TopologyPanel::deleteSelectedRequested);
     manual_grid->addWidget(btn_delete_selected_, 9, 0, 1, 2);
 
+    btn_undo_ = new QPushButton("Undo Last Delete / Edit (Ctrl+Z)", manual_box);
+    btn_undo_->setEnabled(false);
+    btn_undo_->setToolTip("Restore the most recently deleted or modified Node/Link (Shortcut: Ctrl+Z).");
+    btn_undo_->setStyleSheet("background-color: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #0284c7; border-radius: 6px; padding: 6px; font-weight: bold;");
+    connect(btn_undo_, &QPushButton::clicked, this, &TopologyPanel::undoRequested);
+    manual_grid->addWidget(btn_undo_, 10, 0, 1, 2);
+
     layout->addWidget(manual_box);
     layout->addStretch();
 
@@ -175,6 +184,10 @@ void TopologyPanel::set_validation_status(bool is_valid, const std::string& mess
     Q_UNUSED(message);
     lbl_validation_status_->setText(is_valid ? "Status: VALID" : "Status: WARNINGS");
     lbl_validation_status_->setStyleSheet(is_valid ? "color: #34d399; font-weight: bold;" : "color: #f87171; font-weight: bold;");
+}
+
+void TopologyPanel::set_undo_enabled(bool enabled) {
+    if (btn_undo_) btn_undo_->setEnabled(enabled);
 }
 
 }  // namespace ui

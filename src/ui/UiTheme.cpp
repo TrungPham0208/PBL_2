@@ -42,7 +42,10 @@ QString build_dark_stylesheet() {
             background-color: #0b0f19;
             color: #f1f5f9;
             font-family: "Segoe UI", "Inter", "Roboto", sans-serif;
-            font-size: 12px;
+            font-size: 14px;
+        }
+        QLabel {
+            font-size: 14px;
         }
         QGroupBox {
             background-color: #111827;
@@ -51,7 +54,7 @@ QString build_dark_stylesheet() {
             margin-top: 14px;
             padding-top: 12px;
             font-weight: bold;
-            font-size: 11px;
+            font-size: 13px;
             color: #94a3b8;
         }
         QGroupBox::title {
@@ -195,7 +198,7 @@ QString build_dark_stylesheet() {
             background-color: #172033;
             color: #94a3b8;
             font-weight: bold;
-            font-size: 11px;
+            font-size: 13px;
             border: none;
             border-bottom: 2px solid #2563eb;
             padding: 6px;

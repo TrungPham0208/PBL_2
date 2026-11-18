@@ -27,6 +27,7 @@ public:
     double density() const;
     int seed() const;
     void set_validation_status(bool is_valid, const std::string& message = "");
+    void set_undo_enabled(bool enabled);
 
 signals:
     void generateRequested(int node_count, int client_count, double density, int seed);
@@ -34,6 +35,7 @@ signals:
     void addNodeRequested(const std::string& name, const std::string& type);
     void addLinkRequested(int u, int v, int bandwidth_kbps, int latency_ms, double loss_prob);
     void deleteSelectedRequested();
+    void undoRequested();
 
 private:
     QSpinBox* spin_node_count_;
@@ -54,6 +56,7 @@ private:
     QDoubleSpinBox* spin_link_loss_;
     QPushButton* btn_add_link_;
     QPushButton* btn_delete_selected_;
+    QPushButton* btn_undo_;
 };
 
 }  // namespace ui

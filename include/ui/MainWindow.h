@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #ifdef emit
 #pragma push_macro("emit")
@@ -27,6 +28,7 @@
 
 #include <QComboBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMainWindow>
 #include <QPushButton>
 #include <QTableWidget>
@@ -115,6 +117,8 @@ private:
     QPushButton* btn_reset_;
     QPushButton* btn_step1_;
     QPushButton* btn_step10_;
+    QLineEdit* edit_custom_step_;
+    QPushButton* btn_step_custom_;
     QComboBox* combo_sim_speed_;
     QLabel* lbl_sim_status_;
     QLabel* lbl_sim_tick_;
@@ -183,6 +187,30 @@ private:
     void on_xfer_next_step();
     void on_xfer_toggle_auto();
     void on_xfer_timer_tick();
+
+    struct SavedNode {
+        int id;
+        std::string name;
+        std::string type;
+        bool active;
+    };
+    struct SavedLink {
+        int u;
+        int v;
+        int bandwidth;
+        int latency;
+        double loss_prob;
+        double corr_prob;
+        int queue_cap;
+        bool failed;
+    };
+    struct TopologySnapshot {
+        std::vector<SavedNode> nodes;
+        std::vector<SavedLink> links;
+    };
+    std::vector<TopologySnapshot> undo_stack_;
+    void push_topology_undo();
+    void handle_undo_topology();
 };
 
 }  // namespace ui

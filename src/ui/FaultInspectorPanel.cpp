@@ -1,5 +1,6 @@
 #include "ui/FaultInspectorPanel.h"
 
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QVBoxLayout>
@@ -34,7 +35,7 @@ FaultInspectorPanel::FaultInspectorPanel(QWidget* parent) : QWidget(parent) {
         "• <b>Force Corrupt Next Packet (Link only):</b> Corrupts the next packet's payload on the selected Link to test XOR checksum rejection.",
         inspector_box);
     lbl_faults_guide->setWordWrap(true);
-    lbl_faults_guide->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #f59e0b; border-radius: 6px; color: #cbd5e1; font-size: 11px;");
+    lbl_faults_guide->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #f59e0b; border-radius: 6px; color: #cbd5e1; font-size: 13px;");
     insp_layout->addWidget(lbl_faults_guide);
 
     btn_toggle_fail_ = new QPushButton("Toggle Selected Failure / Recovery", inspector_box);
@@ -53,7 +54,33 @@ FaultInspectorPanel::FaultInspectorPanel(QWidget* parent) : QWidget(parent) {
     connect(btn_inject_corruption_, &QPushButton::clicked, this, &FaultInspectorPanel::injectCorruptionRequested);
     insp_layout->addWidget(btn_inject_corruption_);
 
+    QGroupBox* link_edit_box = new QGroupBox("Edit Selected Link Speed / Latency", content);
+    QGridLayout* edit_grid = new QGridLayout(link_edit_box);
+    edit_grid->addWidget(new QLabel("Latency (ms):", link_edit_box), 0, 0);
+    spin_link_latency_ = new QSpinBox(link_edit_box);
+    spin_link_latency_->setRange(1, 500);
+    spin_link_latency_->setValue(10);
+    spin_link_latency_->setEnabled(false);
+    edit_grid->addWidget(spin_link_latency_, 0, 1);
+
+    edit_grid->addWidget(new QLabel("Bandwidth (KB/s):", link_edit_box), 1, 0);
+    spin_link_bandwidth_ = new QSpinBox(link_edit_box);
+    spin_link_bandwidth_->setRange(1, 10000);
+    spin_link_bandwidth_->setValue(100);
+    spin_link_bandwidth_->setEnabled(false);
+    edit_grid->addWidget(spin_link_bandwidth_, 1, 1);
+
+    btn_apply_link_params_ = new QPushButton("Apply & Recalculate Dijkstra", link_edit_box);
+    btn_apply_link_params_->setEnabled(false);
+    btn_apply_link_params_->setToolTip("Update selected Link latency/bandwidth and immediately recalculate the shortest Dijkstra path.");
+    btn_apply_link_params_->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3b82f6, stop:1 #2563eb); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px;");
+    connect(btn_apply_link_params_, &QPushButton::clicked, this, [this]() {
+        emit linkParamsUpdateRequested(spin_link_latency_->value(), spin_link_bandwidth_->value());
+    });
+    edit_grid->addWidget(btn_apply_link_params_, 2, 0, 1, 2);
+
     layout->addWidget(inspector_box);
+    layout->addWidget(link_edit_box);
     layout->addStretch();
 
     scroll->setWidget(content);
@@ -64,8 +91,19 @@ void FaultInspectorPanel::set_selected_info_html(const QString& html) {
     lbl_selected_info_->setText(html);
 }
 
+void FaultInspectorPanel::set_link_params_editor(bool enabled, int latency_ms, int bandwidth_kbps) {
+    spin_link_latency_->setEnabled(enabled);
+    spin_link_bandwidth_->setEnabled(enabled);
+    btn_apply_link_params_->setEnabled(enabled);
+    if (enabled) {
+        spin_link_latency_->setValue(latency_ms);
+        spin_link_bandwidth_->setValue(bandwidth_kbps);
+    }
+}
+
 void FaultInspectorPanel::reset_selection_prompt() {
     lbl_selected_info_->setText("Click any <b>Node (Client / Router)</b> or <b>Link</b> on the canvas to inspect or inject faults.");
+    set_link_params_editor(false, 10, 100);
 }
 
 }  // namespace ui

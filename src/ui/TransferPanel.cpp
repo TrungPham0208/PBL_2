@@ -48,7 +48,7 @@ TransferPanel::TransferPanel(QWidget* parent) : QWidget(parent) {
 
     btn_start_transfer_ = new QPushButton("Start / Reset File Transfer", setup_box);
     btn_start_transfer_->setToolTip("Start a new guided file transfer, or reset and replay from Step 1/6.");
-    btn_start_transfer_->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #10b981, stop:1 #059669); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px; font-size: 12px;");
+    btn_start_transfer_->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #10b981, stop:1 #059669); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 8px; font-size: 13px;");
     connect(btn_start_transfer_, &QPushButton::clicked, this, [this]() {
         if (combo_src_client_->count() == 0 || combo_dst_client_->count() == 0) {
             QMessageBox::warning(this, "Transfer Error", "Need at least two clients in the topology.");
@@ -68,7 +68,7 @@ TransferPanel::TransferPanel(QWidget* parent) : QWidget(parent) {
         "Click 'Start / Reset File Transfer' to watch how a file is split into small pieces, routed through the fastest path, delivered, and confirmed step by step.",
         setup_box);
     lbl_transfer_live_step_->setWordWrap(true);
-    lbl_transfer_live_step_->setStyleSheet("padding: 8px; background-color: #0f172a; border: 1px solid #38bdf8; border-left: 4px solid #38bdf8; border-radius: 6px; color: #e2e8f0; font-size: 11px; font-weight: bold;");
+    lbl_transfer_live_step_->setStyleSheet("padding: 8px; background-color: #0f172a; border: 1px solid #38bdf8; border-left: 4px solid #38bdf8; border-radius: 6px; color: #e2e8f0; font-size: 13px; font-weight: bold;");
     setup_grid->addWidget(lbl_transfer_live_step_, 5, 0, 1, 2);
 
     QHBoxLayout* nav_layout = new QHBoxLayout();
@@ -110,7 +110,7 @@ TransferPanel::TransferPanel(QWidget* parent) : QWidget(parent) {
         "• <b>Size &amp; Checksum:</b> Byte length and XOR checksum for corruption detection.",
         progress_box);
     lbl_chunks_guide->setWordWrap(true);
-    lbl_chunks_guide->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #10b981; border-radius: 6px; color: #cbd5e1; font-size: 11px;");
+    lbl_chunks_guide->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #10b981; border-radius: 6px; color: #cbd5e1; font-size: 13px;");
     prog_layout->addWidget(lbl_chunks_guide);
 
     lbl_transfer_status_ = new QLabel("Transfer Status: IDLE", progress_box);

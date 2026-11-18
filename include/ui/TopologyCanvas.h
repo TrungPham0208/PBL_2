@@ -82,6 +82,7 @@ signals:
     void connect_link_requested(int node_a, int node_b);
     void delete_node_requested(int node_id);
     void toggle_link_failure_requested(int node_a, int node_b);
+    void edit_link_params_requested(int node_a, int node_b);
     void inject_link_loss_requested(int node_a, int node_b);
     void inject_link_corruption_requested(int node_a, int node_b);
     void delete_link_requested(int node_a, int node_b);

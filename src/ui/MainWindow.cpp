@@ -8,11 +8,17 @@
 #include <vector>
 
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
+#include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QIntValidator>
+#include <QKeySequence>
 #include <QMessageBox>
+#include <QShortcut>
 #include <QSplitter>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -64,6 +70,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     setup_initial_startup_topology();
 
+    new QShortcut(QKeySequence::Undo, this, [this]() { handle_undo_topology(); });
+
     setWindowTitle("PBL2 Network Protocol & Dijkstra Simulation Dashboard");
     resize(1280, 820);
 }
@@ -99,6 +107,7 @@ void MainWindow::setup_ui() {
         on_node_selected(node_id);
     });
     connect(canvas_, &TopologyCanvas::delete_node_requested, this, [this](int node_id) {
+        push_topology_undo();
         graph_.remove_node(node_id);
         canvas_->set_selected_node(-1);
         topology_modified_manually_ = true;
@@ -110,6 +119,7 @@ void MainWindow::setup_ui() {
     });
     connect(canvas_, &TopologyCanvas::connect_link_requested, this, [this](int u, int v) {
         if (graph_.has_node(u) && graph_.has_node(v) && u != v && graph_.get_link(u, v) == nullptr) {
+            push_topology_undo();
             graph_.add_link(u, v, 100, 10, 0.0, 0.0, 10);
             topology_modified_manually_ = true;
             canvas_->update();
@@ -124,6 +134,40 @@ void MainWindow::setup_ui() {
         handle_toggle_failure_selected();
         on_link_selected(u, v);
     });
+    connect(canvas_, &TopologyCanvas::edit_link_params_requested, this, [this](int u, int v) {
+        model::Link* l = graph_.get_link(u, v);
+        if (!l) return;
+        QDialog dlg(this);
+        dlg.setWindowTitle(QString("Edit Link %1 <-> %2").arg(u).arg(v));
+        QFormLayout* form = new QFormLayout(&dlg);
+        QSpinBox* spin_lat = new QSpinBox(&dlg);
+        spin_lat->setRange(1, 500);
+        spin_lat->setValue(l->get_latency());
+        QSpinBox* spin_bw = new QSpinBox(&dlg);
+        spin_bw->setRange(1, 10000);
+        spin_bw->setValue(l->get_bandwidth());
+        form->addRow("Latency (ms):", spin_lat);
+        form->addRow("Bandwidth (KB/s):", spin_bw);
+        QDialogButtonBox* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+        connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+        connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+        form->addRow(btns);
+        if (dlg.exec() == QDialog::Accepted) {
+            push_topology_undo();
+            l->set_latency(spin_lat->value());
+            l->set_bandwidth(spin_bw->value());
+            topology_modified_manually_ = true;
+            canvas_->set_selected_link(u, v);
+            canvas_->update();
+            update_route_display();
+            update_queue_table();
+            on_link_selected(u, v);
+            append_log_entry(simulation_service_.get_current_tick(), "Topology",
+                             "Updated Link " + std::to_string(u) + " <-> " + std::to_string(v) +
+                             " -> " + std::to_string(spin_lat->value()) + "ms, " + std::to_string(spin_bw->value()) + "KB/s",
+                             "Dijkstra shortest path recalculated");
+        }
+    });
     connect(canvas_, &TopologyCanvas::inject_link_loss_requested, this, [this](int u, int v) {
         canvas_->set_selected_link(u, v);
         handle_inject_loss_selected();
@@ -133,6 +177,7 @@ void MainWindow::setup_ui() {
         handle_inject_corruption_selected();
     });
     connect(canvas_, &TopologyCanvas::delete_link_requested, this, [this](int u, int v) {
+        push_topology_undo();
         graph_.remove_link(u, v);
         canvas_->set_selected_link(-1, -1);
         topology_modified_manually_ = true;
@@ -180,6 +225,38 @@ QWidget* MainWindow::create_top_toolbar() {
     btn_step10_ = new QPushButton("Step +10ms", bar_box);
     btn_step10_->setToolTip("Advance the simulation clock by 10 ms.");
 
+    edit_custom_step_ = new QLineEdit(bar_box);
+    edit_custom_step_->setValidator(new QIntValidator(1, 5000, edit_custom_step_));
+    edit_custom_step_->setText("25");
+    edit_custom_step_->setPlaceholderText("ms");
+    edit_custom_step_->setAlignment(Qt::AlignCenter);
+    edit_custom_step_->setFixedWidth(68);
+    edit_custom_step_->setToolTip("Type any number of ms (1 - 5000) and click 'Step +' or press Enter.");
+
+    btn_step_custom_ = new QPushButton("Step +", bar_box);
+    btn_step_custom_->setToolTip("Advance the simulation clock by the number entered in the box.");
+    btn_step_custom_->setStyleSheet("background-color: #1e293b; color: #38bdf8; border: 1px solid #0284c7; border-radius: 6px; padding: 6px 10px; font-weight: bold;");
+
+    auto step_by_ticks = [this](int ticks) {
+        if (transfer_chunks_.empty()) {
+            int src_id = transfer_panel_->selected_src_id();
+            int dst_id = transfer_panel_->selected_dst_id();
+            if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
+                initialize_transfer_session(src_id, dst_id, transfer_panel_->payload_text(), transfer_panel_->chunk_size(), false);
+            }
+        }
+        handle_advance_ticks(ticks);
+    };
+
+    auto apply_custom_step = [this, step_by_ticks]() {
+        bool ok = false;
+        int val = edit_custom_step_->text().toInt(&ok);
+        if (!ok || val < 1) val = 1;
+        if (val > 5000) val = 5000;
+        edit_custom_step_->setText(QString::number(val));
+        step_by_ticks(val);
+    };
+
     connect(btn_start_, &QPushButton::clicked, this, [this]() {
         if (transfer_chunks_.empty() || transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
             int src_id = transfer_panel_->selected_src_id();
@@ -194,26 +271,10 @@ QWidget* MainWindow::create_top_toolbar() {
     connect(btn_pause_, &QPushButton::clicked, this, [this]() { handle_pause_simulation(); });
     connect(btn_resume_, &QPushButton::clicked, this, [this]() { handle_resume_simulation(); });
     connect(btn_reset_, &QPushButton::clicked, this, [this]() { handle_reset_simulation(); });
-    connect(btn_step1_, &QPushButton::clicked, this, [this]() {
-        if (transfer_chunks_.empty()) {
-            int src_id = transfer_panel_->selected_src_id();
-            int dst_id = transfer_panel_->selected_dst_id();
-            if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
-                initialize_transfer_session(src_id, dst_id, transfer_panel_->payload_text(), transfer_panel_->chunk_size(), false);
-            }
-        }
-        handle_advance_ticks(1);
-    });
-    connect(btn_step10_, &QPushButton::clicked, this, [this]() {
-        if (transfer_chunks_.empty()) {
-            int src_id = transfer_panel_->selected_src_id();
-            int dst_id = transfer_panel_->selected_dst_id();
-            if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
-                initialize_transfer_session(src_id, dst_id, transfer_panel_->payload_text(), transfer_panel_->chunk_size(), false);
-            }
-        }
-        handle_advance_ticks(10);
-    });
+    connect(btn_step1_, &QPushButton::clicked, this, [step_by_ticks]() { step_by_ticks(1); });
+    connect(btn_step10_, &QPushButton::clicked, this, [step_by_ticks]() { step_by_ticks(10); });
+    connect(btn_step_custom_, &QPushButton::clicked, this, apply_custom_step);
+    connect(edit_custom_step_, &QLineEdit::returnPressed, this, apply_custom_step);
 
     QLabel* lbl_speed = new QLabel("Speed:", bar_box);
     lbl_speed->setStyleSheet("color: #94a3b8; font-weight: bold;");
@@ -255,6 +316,8 @@ QWidget* MainWindow::create_top_toolbar() {
     layout->addWidget(btn_reset_);
     layout->addWidget(btn_step1_);
     layout->addWidget(btn_step10_);
+    layout->addWidget(edit_custom_step_);
+    layout->addWidget(btn_step_custom_);
     layout->addWidget(lbl_speed);
     layout->addWidget(combo_sim_speed_);
     layout->addSpacing(8);
@@ -287,6 +350,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
         QMessageBox::information(this, "Topology Validation", QString::fromStdString(res));
     });
     connect(topology_panel_, &TopologyPanel::addNodeRequested, this, [this](const std::string& name, const std::string& type) {
+        push_topology_undo();
         int new_id = 1;
         while (graph_.has_node(new_id)) new_id++;
         std::string final_name = name.empty() ? (type + std::to_string(new_id)) : name;
@@ -308,6 +372,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
         if (!graph_.has_node(u) || !graph_.has_node(v) || u == v || graph_.get_link(u, v) != nullptr) {
             QMessageBox::warning(this, "Link Error", "Cannot create link. Ensure both nodes exist, are distinct, and are not already linked.");
         } else {
+            push_topology_undo();
             graph_.add_link(u, v, bw, lat, loss, 0.0, 10);
             topology_modified_manually_ = true;
             canvas_->update();
@@ -322,6 +387,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
         int sel_node = canvas_->get_selected_node();
         std::pair<int, int> sel_link = canvas_->get_selected_link();
         if (sel_node != -1) {
+            push_topology_undo();
             graph_.remove_node(sel_node);
             canvas_->set_selected_node(-1);
             topology_modified_manually_ = true;
@@ -331,6 +397,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
             update_queue_table();
             fault_panel_->reset_selection_prompt();
         } else if (sel_link.first != -1) {
+            push_topology_undo();
             graph_.remove_link(sel_link.first, sel_link.second);
             canvas_->set_selected_link(-1, -1);
             topology_modified_manually_ = true;
@@ -340,6 +407,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
             fault_panel_->reset_selection_prompt();
         }
     });
+    connect(topology_panel_, &TopologyPanel::undoRequested, this, &MainWindow::handle_undo_topology);
 
     // Tab 2 wiring
     connect(transfer_panel_, &TransferPanel::startTransferRequested, this, &MainWindow::start_guided_transfer);
@@ -351,6 +419,24 @@ QWidget* MainWindow::create_sidebar_tabs() {
     connect(fault_panel_, &FaultInspectorPanel::toggleFailureRequested, this, &MainWindow::handle_toggle_failure_selected);
     connect(fault_panel_, &FaultInspectorPanel::injectLossRequested, this, &MainWindow::handle_inject_loss_selected);
     connect(fault_panel_, &FaultInspectorPanel::injectCorruptionRequested, this, &MainWindow::handle_inject_corruption_selected);
+    connect(fault_panel_, &FaultInspectorPanel::linkParamsUpdateRequested, this, [this](int latency_ms, int bandwidth_kbps) {
+        std::pair<int, int> sel_link = canvas_->get_selected_link();
+        if (sel_link.first == -1) return;
+        model::Link* l = graph_.get_link(sel_link.first, sel_link.second);
+        if (!l) return;
+        push_topology_undo();
+        l->set_latency(latency_ms);
+        l->set_bandwidth(bandwidth_kbps);
+        topology_modified_manually_ = true;
+        canvas_->update();
+        update_route_display();
+        update_queue_table();
+        on_link_selected(sel_link.first, sel_link.second);
+        append_log_entry(simulation_service_.get_current_tick(), "Topology",
+                         "Updated Link " + std::to_string(sel_link.first) + " <-> " + std::to_string(sel_link.second) +
+                         " -> " + std::to_string(latency_ms) + "ms, " + std::to_string(bandwidth_kbps) + "KB/s",
+                         "Dijkstra shortest path recalculated");
+    });
 
     // Tab 5 wiring
     connect(demo_panel_, &DemoPanel::probeRequested, this, [this]() {
@@ -414,7 +500,7 @@ QWidget* MainWindow::create_bottom_panel() {
     lbl_stats_summary_ = new QLabel(
         "Sent: 0 | Delivered: 0 | Dropped: 0 | Lost: 0 | Corrupted: 0 | Heartbeats: 0 | Acks: 0 | Retries: 0",
         bottom_box);
-    lbl_stats_summary_->setStyleSheet("font-weight: bold; color: #f1f5f9; font-size: 12px;");
+    lbl_stats_summary_->setStyleSheet("font-weight: bold; color: #f1f5f9; font-size: 13px;");
     btn_clear_log_ = new QPushButton("Clear Log", bottom_box);
     connect(btn_clear_log_, &QPushButton::clicked, this, [this]() { table_event_log_->setRowCount(0); });
 
@@ -810,7 +896,7 @@ void MainWindow::on_node_selected(int node_id) {
     QString status_badge = n->is_active() ? "<span style='color:#34d399; font-weight:bold;'>● ACTIVE</span>"
                                           : "<span style='color:#f87171; font-weight:bold;'>● FAILED</span>";
     QString info = QString("<div style='line-height: 1.6;'>"
-                           "<b style='color:#38bdf8; font-size:12px;'>Selected Node: ID %1</b><br>"
+                           "<b style='color:#38bdf8; font-size:14px;'>Selected Node: ID %1</b><br>"
                            "<b>Name:</b> %2<br>"
                            "<b>Type:</b> %3<br>"
                            "<b>Status:</b> %4</div>")
@@ -819,6 +905,7 @@ void MainWindow::on_node_selected(int node_id) {
                        .arg(QString::fromStdString(n->get_type()))
                        .arg(status_badge);
     fault_panel_->set_selected_info_html(info);
+    fault_panel_->set_link_params_editor(false, 10, 100);
 }
 
 void MainWindow::on_link_selected(int node_a, int node_b) {
@@ -828,7 +915,7 @@ void MainWindow::on_link_selected(int node_a, int node_b) {
     QString status_badge = l->is_failed() ? "<span style='color:#f87171; font-weight:bold;'>● FAILED</span>"
                                           : "<span style='color:#34d399; font-weight:bold;'>● ACTIVE</span>";
     QString info = QString("<div style='line-height: 1.6;'>"
-                           "<b style='color:#38bdf8; font-size:12px;'>Selected Link: %1 ⮂ %2</b><br>"
+                           "<b style='color:#38bdf8; font-size:14px;'>Selected Link: %1 ⮂ %2</b><br>"
                            "<b>Bandwidth:</b> %3 KB/s<br>"
                            "<b>Latency:</b> %4 ms<br>"
                            "<b>Queue:</b> %5 / %6<br>"
@@ -839,6 +926,7 @@ void MainWindow::on_link_selected(int node_a, int node_b) {
                        .arg(l->queue_size()).arg(l->queue_capacity())
                        .arg(status_badge);
     fault_panel_->set_selected_info_html(info);
+    fault_panel_->set_link_params_editor(true, l->get_latency(), l->get_bandwidth());
 }
 
 void MainWindow::on_canvas_clicked() {
@@ -1602,6 +1690,77 @@ void MainWindow::apply_xfer_step(int step) {
         xfer_timer_->start(3000);
     }
     transfer_panel_->update_nav_buttons(xfer_step_active_, xfer_step_, 5, was_auto && xfer_step_ < 5);
+}
+
+void MainWindow::push_topology_undo() {
+    TopologySnapshot snap;
+    const dsa::DynamicArray<int>& node_ids = graph_.get_node_ids();
+    for (int i = 0; i < node_ids.size(); ++i) {
+        const model::Node* n = graph_.get_node(node_ids[i]);
+        if (!n) continue;
+        snap.nodes.push_back({n->get_id(), n->get_name(), n->get_type(), n->is_active()});
+    }
+    const dsa::DynamicArray<model::Link*>& links = graph_.get_all_links();
+    for (int i = 0; i < links.size(); ++i) {
+        const model::Link* l = links[i];
+        if (!l) continue;
+        snap.links.push_back({
+            l->get_first_node_id(),
+            l->get_second_node_id(),
+            l->get_bandwidth(),
+            l->get_latency(),
+            l->get_loss_probability(),
+            l->get_corruption_probability(),
+            l->queue_capacity(),
+            l->is_failed()
+        });
+    }
+    undo_stack_.push_back(std::move(snap));
+    if (undo_stack_.size() > 25) {
+        undo_stack_.erase(undo_stack_.begin());
+    }
+    topology_panel_->set_undo_enabled(true);
+}
+
+void MainWindow::handle_undo_topology() {
+    if (undo_stack_.empty()) return;
+    TopologySnapshot snap = std::move(undo_stack_.back());
+    undo_stack_.pop_back();
+
+    handle_reset_simulation();
+    graph_ = model::NetworkGraph();
+    canvas_->set_network_graph(&graph_);
+
+    for (const SavedNode& sn : snap.nodes) {
+        if (sn.type == "Client") {
+            graph_.add_client(sn.id, sn.name);
+        } else {
+            graph_.add_router(sn.id, sn.name);
+        }
+        if (!sn.active) {
+            simulation_service_.fail_node_manually(sn.id);
+        }
+    }
+    for (const SavedLink& sl : snap.links) {
+        graph_.add_link(sl.u, sl.v, sl.bandwidth, sl.latency, sl.loss_prob, sl.corr_prob, sl.queue_cap);
+        if (sl.failed) {
+            simulation_service_.fail_link_manually(sl.u, sl.v);
+        }
+    }
+
+    canvas_->set_selected_node(-1);
+    canvas_->set_selected_link(-1, -1);
+    canvas_->update_layout();
+    refresh_client_combos();
+    canvas_->update();
+    update_route_display();
+    update_queue_table();
+    fault_panel_->reset_selection_prompt();
+    topology_panel_->set_undo_enabled(!undo_stack_.empty());
+
+    append_log_entry(simulation_service_.get_current_tick(), "Topology",
+                     "Undid last topology change (restored nodes & links)",
+                     "Remaining undo steps: " + std::to_string(undo_stack_.size()));
 }
 
 }  // namespace ui

@@ -28,13 +28,13 @@ DemoPanel::DemoPanel(QWidget* parent) : QWidget(parent) {
 
     QPushButton* btn_demo1 = new QPushButton("Start / Reset Scenario 1: Dynamic Recovery & Rerouting", demo_box);
     btn_demo1->setToolTip("Start or reset Preset Scenario 1 (6-node neighbor probing, failure detection, and Dijkstra rerouting).");
-    btn_demo1->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3b82f6, stop:1 #1d4ed8); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 10px; font-size: 12px;");
+    btn_demo1->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3b82f6, stop:1 #1d4ed8); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 10px; font-size: 13px;");
     connect(btn_demo1, &QPushButton::clicked, this, &DemoPanel::scenario1Requested);
     d_layout->addWidget(btn_demo1);
 
     QPushButton* btn_demo2 = new QPushButton("Start / Reset Scenario 2: Controlled Retry-Limit Failure", demo_box);
     btn_demo2->setToolTip("Start or reset Preset Scenario 2 (severing both last-hop links to Client2 to prove 3-retry abort).");
-    btn_demo2->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ef4444, stop:1 #b91c1c); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 10px; font-size: 12px;");
+    btn_demo2->setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ef4444, stop:1 #b91c1c); color: white; font-weight: bold; border: none; border-radius: 6px; padding: 10px; font-size: 13px;");
     connect(btn_demo2, &QPushButton::clicked, this, &DemoPanel::scenario2Requested);
     d_layout->addWidget(btn_demo2);
 
@@ -42,7 +42,7 @@ DemoPanel::DemoPanel(QWidget* parent) : QWidget(parent) {
         "Ready for step-by-step demonstration. Click Preset Scenario 1 or Scenario 2 to begin.",
         demo_box);
     lbl_demo_live_step_->setWordWrap(true);
-    lbl_demo_live_step_->setStyleSheet("padding: 10px; background-color: #0f172a; border: 1px solid #38bdf8; border-left: 4px solid #38bdf8; border-radius: 6px; color: #e2e8f0; font-size: 12px; font-weight: bold;");
+    lbl_demo_live_step_->setStyleSheet("padding: 10px; background-color: #0f172a; border: 1px solid #38bdf8; border-left: 4px solid #38bdf8; border-radius: 6px; color: #e2e8f0; font-size: 13px; font-weight: bold;");
     d_layout->addWidget(lbl_demo_live_step_);
 
     QHBoxLayout* nav_layout = new QHBoxLayout();
@@ -80,7 +80,7 @@ DemoPanel::DemoPanel(QWidget* parent) : QWidget(parent) {
         "• Severing both last-hop links isolates Client2 completely (Destination Unreachable), causing ACK timeouts until the max retry limit (3 attempts) aborts the transfer cleanly.",
         demo_box);
     lbl_demo_desc->setWordWrap(true);
-    lbl_demo_desc->setStyleSheet("padding: 10px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 4px solid #8b5cf6; border-radius: 6px; color: #cbd5e1; line-height: 1.5; font-size: 11px;");
+    lbl_demo_desc->setStyleSheet("padding: 10px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 4px solid #8b5cf6; border-radius: 6px; color: #cbd5e1; line-height: 1.5; font-size: 13px;");
     d_layout->addWidget(lbl_demo_desc);
 
     layout->addWidget(demo_box);

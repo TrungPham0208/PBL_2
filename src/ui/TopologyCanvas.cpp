@@ -1105,6 +1105,11 @@ void TopologyCanvas::contextMenuEvent(QContextMenuEvent* event) {
 
         const model::Link* l = graph_->get_link(link.first, link.second);
         QMenu menu(this);
+        QAction* act_edit = menu.addAction("Edit Latency / Bandwidth...");
+        connect(act_edit, &QAction::triggered, this, [this, link]() {
+            emit edit_link_params_requested(link.first, link.second);
+        });
+        menu.addSeparator();
         QString fail_label = (l && l->is_failed()) ? "Recover Link" : "Fail Link";
         QAction* act_toggle = menu.addAction(fail_label);
         connect(act_toggle, &QAction::triggered, this, [this, link]() {

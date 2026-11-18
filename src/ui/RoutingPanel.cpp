@@ -41,7 +41,7 @@ RoutingPanel::RoutingPanel(QWidget* parent) : QWidget(parent) {
         "Dijkstra Formula: Cost = Latency(ms) + (100 / Bandwidth KB/s) + (2 × Loss% × 100)",
         route_box);
     lbl_route_breakdown_->setWordWrap(true);
-    lbl_route_breakdown_->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #38bdf8; border-radius: 6px; color: #cbd5e1; font-size: 11px;");
+    lbl_route_breakdown_->setStyleSheet("padding: 8px; background-color: #0b0f19; border: 1px solid #1f293d; border-left: 3px solid #38bdf8; border-radius: 6px; color: #cbd5e1; font-size: 13px;");
 
     r_box_layout->addWidget(lbl_active_route_);
     r_box_layout->addWidget(lbl_route_cost_);
