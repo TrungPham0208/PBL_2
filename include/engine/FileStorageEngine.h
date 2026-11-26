@@ -7,20 +7,20 @@
 #include "model/NetworkGraph.h"
 #include "model/Router.h"
 #include "pbl/dsa/DynamicArray.h"
-#include "services/SimulationService.h"
-#include "services/TransferService.h"
+#include "engine/SimulationEngine.h"
+#include "engine/TransferEngine.h"
 
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 10: Core logic — JSON configuration and experiment persistence
-// FileStorageService provides local, file-based JSON persistence for network topology,
+// FileStorageEngine provides local, file-based JSON persistence for network topology,
 // experiment configuration, and simulation results.
 // No external database, credentials, or paid third-party services are used.
 // Invalid or incomplete JSON files are strictly rejected with descriptive runtime errors.
-class FileStorageService {
+class FileStorageEngine {
 public:
     // Representation of a node configuration in JSON
     struct NodeConfig {
@@ -99,8 +99,8 @@ public:
         string outcome; // "SUCCESS" or "FAILURE"
         int total_ticks;
         SimulationConfig config;
-        SimulationService::Statistics simulation_stats;
-        TransferService::TransferStatistics transfer_stats;
+        SimulationEngine::Statistics simulation_stats;
+        TransferEngine::TransferStatistics transfer_stats;
         dsa::DynamicArray<string> route_changes;
         dsa::DynamicArray<string> packet_events;
 
@@ -144,8 +144,8 @@ public:
         bool as_bool() const;
     };
 
-    FileStorageService();
-    // FileStorageService does not own dynamically allocated heap memory,
+    FileStorageEngine();
+    // FileStorageEngine does not own dynamically allocated heap memory,
     // so no custom destructor is required.
 
     // JSON String Parsing and Serialization

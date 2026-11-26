@@ -5,7 +5,7 @@
 #include "model/NetworkGraph.h"
 #include "model/Packet.h"
 #include "model/Router.h"
-#include "services/RoutingService.h"
+#include "engine/RoutingEngine.h"
 
 using namespace std;
 
@@ -13,7 +13,7 @@ namespace {
 
 // Milestone 4: Test centralized routing cost formula and metric influence
 void test_cost_formula() {
-    pbl::services::RoutingService router_service;
+    pbl::engine::RoutingEngine router_service;
 
     // Default weights: latency=1.0, bandwidth=1.0, loss=2.0, ref_bw=100.0
     // cost = (1.0 * latency) + (1.0 * (100.0 / bandwidth)) + (2.0 * loss * 100.0)
@@ -71,8 +71,8 @@ void test_basic_dijkstra() {
     // Link (2, 3): latency 10ms, bw 100 B/ms, loss 0 -> cost = 10 + (100/100) = 11.0
     graph.add_link(2, 3, 100, 10, 0.0);
 
-    pbl::services::RoutingService service;
-    pbl::services::RoutingService::Route route_1_to_3 = service.find_route(graph, 1, 3);
+    pbl::engine::RoutingEngine service;
+    pbl::engine::RoutingEngine::Route route_1_to_3 = service.find_route(graph, 1, 3);
 
     assert(route_1_to_3.found);
     assert(route_1_to_3.path.size() == 3);
@@ -84,7 +84,7 @@ void test_basic_dijkstra() {
     assert(route_1_to_3.get_next_hop() == 2);
 
     // Reverse direction (undirected consistency)
-    pbl::services::RoutingService::Route route_3_to_1 = service.find_route(graph, 3, 1);
+    pbl::engine::RoutingEngine::Route route_3_to_1 = service.find_route(graph, 3, 1);
     assert(route_3_to_1.found);
     assert(route_3_to_1.path.size() == 3);
     assert(route_3_to_1.path[0] == 3);
@@ -93,7 +93,7 @@ void test_basic_dijkstra() {
     assert(abs(route_3_to_1.total_cost - 17.0) < 1e-6);
 
     // Trivial case: source is destination
-    pbl::services::RoutingService::Route route_same = service.find_route(graph, 1, 1);
+    pbl::engine::RoutingEngine::Route route_same = service.find_route(graph, 1, 1);
     assert(route_same.found);
     assert(route_same.path.size() == 1);
     assert(route_same.path[0] == 1);
@@ -118,8 +118,8 @@ void test_lowest_cost_selection() {
     graph.add_link(1, 3, 100, 50, 0.0);
     graph.add_link(3, 4, 100, 50, 0.0);
 
-    pbl::services::RoutingService service;
-    pbl::services::RoutingService::Route route = service.find_route(graph, 1, 4);
+    pbl::engine::RoutingEngine service;
+    pbl::engine::RoutingEngine::Route route = service.find_route(graph, 1, 4);
 
     // Optimal route is Path A
     assert(route.found);
@@ -131,7 +131,7 @@ void test_lowest_cost_selection() {
     // Path A total cost becomes ~ 172.0, which is worse than Path B's 102.0
     graph.get_link(1, 2)->set_loss_probability(0.8);
 
-    pbl::services::RoutingService::Route new_route = service.find_route(graph, 1, 4);
+    pbl::engine::RoutingEngine::Route new_route = service.find_route(graph, 1, 4);
     assert(new_route.found);
     // Dijkstra switches to Path B (via Router 3) due to loss penalty!
     assert(new_route.path.size() == 3);
@@ -154,26 +154,26 @@ void test_failed_nodes_avoidance() {
     graph.add_link(1, 3, 100, 14, 0.0);
     graph.add_link(3, 4, 100, 14, 0.0);
 
-    pbl::services::RoutingService service;
+    pbl::engine::RoutingEngine service;
 
     // Normal state selects Path A
     assert(service.find_route(graph, 1, 4).path[1] == 2);
 
     // Fail Router 2: Dijkstra must exclude Router 2 and reroute via Router 3
     graph.fail_node(2);
-    pbl::services::RoutingService::Route route_after_node_fail = service.find_route(graph, 1, 4);
+    pbl::engine::RoutingEngine::Route route_after_node_fail = service.find_route(graph, 1, 4);
     assert(route_after_node_fail.found);
     assert(route_after_node_fail.path[1] == 3);
 
     // Fail Router 3 as well: no paths remain, so unreachable
     graph.fail_node(3);
-    pbl::services::RoutingService::Route no_route = service.find_route(graph, 1, 4);
+    pbl::engine::RoutingEngine::Route no_route = service.find_route(graph, 1, 4);
     assert(!no_route.found);
     assert(no_route.path.empty());
 
     // Recover Router 2: path via Router 2 becomes available again
     graph.recover_node(2);
-    pbl::services::RoutingService::Route recovered_route = service.find_route(graph, 1, 4);
+    pbl::engine::RoutingEngine::Route recovered_route = service.find_route(graph, 1, 4);
     assert(recovered_route.found);
     assert(recovered_route.path[1] == 2);
 
@@ -202,14 +202,14 @@ void test_failed_links_avoidance() {
     graph.add_link(1, 3, 100, 14, 0.0);
     graph.add_link(3, 4, 100, 14, 0.0);
 
-    pbl::services::RoutingService service;
+    pbl::engine::RoutingEngine service;
 
     // Initially selects Path A (via 2)
     assert(service.find_route(graph, 1, 4).path[1] == 2);
 
     // Fail link (1, 2): must reroute via Path B (via 3)
     graph.fail_link(1, 2);
-    pbl::services::RoutingService::Route route_after_link_fail = service.find_route(graph, 1, 4);
+    pbl::engine::RoutingEngine::Route route_after_link_fail = service.find_route(graph, 1, 4);
     assert(route_after_link_fail.found);
     assert(route_after_link_fail.path[1] == 3);
 
@@ -236,14 +236,14 @@ void test_unreachable_explicitly_reported() {
     graph.add_router(4, "Router-4");
     graph.add_link(3, 4, 100, 5);
 
-    pbl::services::RoutingService service;
-    pbl::services::RoutingService::Route unreachable = service.find_route(graph, 1, 3);
+    pbl::engine::RoutingEngine service;
+    pbl::engine::RoutingEngine::Route unreachable = service.find_route(graph, 1, 3);
     assert(!unreachable.found);
     assert(unreachable.path.empty());
     assert(unreachable.total_cost == 0.0);
 
     // Non-existent node id
-    pbl::services::RoutingService::Route invalid_node = service.find_route(graph, 1, 999);
+    pbl::engine::RoutingEngine::Route invalid_node = service.find_route(graph, 1, 999);
     assert(!invalid_node.found);
     assert(invalid_node.path.empty());
 }
@@ -271,8 +271,8 @@ void test_stale_entries_and_multi_path_relaxation() {
     // Link (3, 2): latency 2ms -> cost = 2 + 1 = 3.0
     graph.add_link(3, 2, 100, 2, 0.0);
 
-    pbl::services::RoutingService service;
-    pbl::services::RoutingService::Route route = service.find_route(graph, 1, 2);
+    pbl::engine::RoutingEngine service;
+    pbl::engine::RoutingEngine::Route route = service.find_route(graph, 1, 2);
 
     assert(route.found);
     assert(route.path.size() == 3);
@@ -289,10 +289,10 @@ void test_routing_table_and_validity() {
     graph.add_link(1, 2, 100, 5);
     graph.add_link(2, 3, 100, 5);
 
-    pbl::services::RoutingService service;
+    pbl::engine::RoutingEngine service;
 
     // Check routing table for Client 1
-    pbl::dsa::DynamicArray<pbl::services::RoutingService::RoutingTableEntry> table =
+    pbl::dsa::DynamicArray<pbl::engine::RoutingEngine::RoutingTableEntry> table =
         service.calculate_routing_table(graph, 1);
 
     assert(table.size() == 2); // Entries for Router 2 and Client 3
@@ -305,7 +305,7 @@ void test_routing_table_and_validity() {
     }
 
     // Check route validity
-    pbl::services::RoutingService::Route valid_route = service.find_route(graph, 1, 3);
+    pbl::engine::RoutingEngine::Route valid_route = service.find_route(graph, 1, 3);
     assert(service.is_route_valid(graph, valid_route));
 
     // Fail Router 2: route must now be flagged invalid
@@ -333,8 +333,8 @@ void test_packet_state_non_mutation() {
     link->enqueue(test_packet);
     assert(link->queue_size() == 1);
 
-    pbl::services::RoutingService service;
-    pbl::services::RoutingService::Route route = service.find_route(graph, 1, 2);
+    pbl::engine::RoutingEngine service;
+    pbl::engine::RoutingEngine::Route route = service.find_route(graph, 1, 2);
     assert(route.found);
 
     // Queue on link must remain completely unchanged

@@ -4,7 +4,7 @@
 #include "model/Link.h"
 #include "model/NetworkGraph.h"
 #include "model/Router.h"
-#include "services/FileStorageService.h"
+#include "engine/FileStorageEngine.h"
 
 using namespace std;
 
@@ -30,7 +30,7 @@ static int tests_passed = 0;
     } while (0)
 
 void test_json_primitives_and_nesting() {
-    pbl::services::FileStorageService storage;
+    pbl::engine::FileStorageEngine storage;
 
     string sample_json = "{\n"
                          "  \"name\": \"simulator_test\",\n"
@@ -45,37 +45,37 @@ void test_json_primitives_and_nesting() {
                          "  }\n"
                          "}";
 
-    pbl::services::FileStorageService::JsonValue parsed = storage.parse_json(sample_json);
-    TEST_ASSERT(parsed.type == pbl::services::FileStorageService::JsonType::JSON_OBJECT, "Parsed root is object");
+    pbl::engine::FileStorageEngine::JsonValue parsed = storage.parse_json(sample_json);
+    TEST_ASSERT(parsed.type == pbl::engine::FileStorageEngine::JsonType::JSON_OBJECT, "Parsed root is object");
     TEST_ASSERT(parsed.has_key("name"), "Root has 'name' key");
     TEST_ASSERT(parsed.get("name").as_string() == "simulator_test", "Name matches");
     TEST_ASSERT(parsed.get("version").as_int() == 2, "Version matches integer 2");
     TEST_ASSERT(abs(parsed.get("loss_rate").as_double() - 0.05) < 1e-6, "Loss rate matches 0.05");
     TEST_ASSERT(parsed.get("is_active").as_bool() == true, "is_active is true");
     TEST_ASSERT(parsed.get("is_corrupted").as_bool() == false, "is_corrupted is false");
-    TEST_ASSERT(parsed.get("empty_val").type == pbl::services::FileStorageService::JsonType::JSON_NULL, "empty_val is null");
+    TEST_ASSERT(parsed.get("empty_val").type == pbl::engine::FileStorageEngine::JsonType::JSON_NULL, "empty_val is null");
 
-    const pbl::services::FileStorageService::JsonValue& tags = parsed.get("tags");
-    TEST_ASSERT(tags.type == pbl::services::FileStorageService::JsonType::JSON_ARRAY, "tags is array");
+    const pbl::engine::FileStorageEngine::JsonValue& tags = parsed.get("tags");
+    TEST_ASSERT(tags.type == pbl::engine::FileStorageEngine::JsonType::JSON_ARRAY, "tags is array");
     TEST_ASSERT(tags.array_value.size() == 3, "tags has 3 items");
     TEST_ASSERT(tags.array_value[0].as_string() == "pbl", "tags[0] is 'pbl'");
     TEST_ASSERT(tags.array_value[1].as_string() == "network", "tags[1] is 'network'");
     TEST_ASSERT(tags.array_value[2].as_int() == 42, "tags[2] is 42");
 
-    const pbl::services::FileStorageService::JsonValue& nested = parsed.get("nested");
-    TEST_ASSERT(nested.type == pbl::services::FileStorageService::JsonType::JSON_OBJECT, "nested is object");
+    const pbl::engine::FileStorageEngine::JsonValue& nested = parsed.get("nested");
+    TEST_ASSERT(nested.type == pbl::engine::FileStorageEngine::JsonType::JSON_OBJECT, "nested is object");
     TEST_ASSERT(nested.get("inner_key").as_string() == "nested_val", "inner_key matches nested_val");
 
     // Serialization roundtrip
     string serialized = storage.serialize_json(parsed);
-    pbl::services::FileStorageService::JsonValue roundtrip = storage.parse_json(serialized);
+    pbl::engine::FileStorageEngine::JsonValue roundtrip = storage.parse_json(serialized);
     TEST_ASSERT(roundtrip.get("name").as_string() == "simulator_test", "Roundtrip preserved string");
     TEST_ASSERT(roundtrip.get("version").as_int() == 2, "Roundtrip preserved number");
     TEST_ASSERT(roundtrip.get("tags").array_value.size() == 3, "Roundtrip preserved array size");
 }
 
 void test_json_malformed_rejection() {
-    pbl::services::FileStorageService storage;
+    pbl::engine::FileStorageEngine storage;
 
     // Test incomplete object (missing closing brace)
     bool threw1 = false;
@@ -124,10 +124,10 @@ void test_json_malformed_rejection() {
 }
 
 void test_config_save_load_and_graph_application() {
-    pbl::services::FileStorageService storage;
+    pbl::engine::FileStorageEngine storage;
     string temp_config_file = "test_temp_config.json";
 
-    pbl::services::FileStorageService::SimulationConfig config;
+    pbl::engine::FileStorageEngine::SimulationConfig config;
     config.random_seed = 998877;
     config.chunk_size = 2048;
     config.heartbeat_interval = 50;
@@ -135,20 +135,20 @@ void test_config_save_load_and_graph_application() {
     config.source_client_id = 1;
     config.destination_client_id = 4;
 
-    config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(1, "ClientA", "Client"));
-    config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(2, "Router1", "Router"));
-    config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(3, "Router2", "Router"));
-    config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(4, "ClientB", "Client"));
+    config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(1, "ClientA", "Client"));
+    config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(2, "Router1", "Router"));
+    config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(3, "Router2", "Router"));
+    config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(4, "ClientB", "Client"));
 
-    config.links.push_back(pbl::services::FileStorageService::LinkConfig(1, 2, 100, 5, 0.0, 0.0, 10));
-    config.links.push_back(pbl::services::FileStorageService::LinkConfig(2, 3, 50, 15, 0.02, 0.01, 20));
-    config.links.push_back(pbl::services::FileStorageService::LinkConfig(3, 4, 100, 5, 0.0, 0.0, 10));
+    config.links.push_back(pbl::engine::FileStorageEngine::LinkConfig(1, 2, 100, 5, 0.0, 0.0, 10));
+    config.links.push_back(pbl::engine::FileStorageEngine::LinkConfig(2, 3, 50, 15, 0.02, 0.01, 20));
+    config.links.push_back(pbl::engine::FileStorageEngine::LinkConfig(3, 4, 100, 5, 0.0, 0.0, 10));
 
     // Save config
     storage.save_config(temp_config_file, config);
 
     // Load config back
-    pbl::services::FileStorageService::SimulationConfig loaded = storage.load_config(temp_config_file);
+    pbl::engine::FileStorageEngine::SimulationConfig loaded = storage.load_config(temp_config_file);
     TEST_ASSERT(loaded.random_seed == 998877, "Loaded seed matches");
     TEST_ASSERT(loaded.chunk_size == 2048, "Loaded chunk size matches");
     TEST_ASSERT(loaded.heartbeat_interval == 50, "Loaded heartbeat interval matches");
@@ -178,7 +178,7 @@ void test_config_save_load_and_graph_application() {
     TEST_ASSERT(abs(l23->get_corruption_probability() - 0.01) < 1e-6, "Link 2-3 corruption prob matches");
 
     // Extract config from graph and check consistency
-    pbl::services::FileStorageService::SimulationConfig extracted =
+    pbl::engine::FileStorageEngine::SimulationConfig extracted =
         storage.extract_config_from_graph(graph, 998877, 2048, 1, 4);
     TEST_ASSERT(extracted.nodes.size() == 4, "Extracted nodes count is 4");
     TEST_ASSERT(extracted.links.size() == 3, "Extracted links count is 3");
@@ -190,10 +190,10 @@ void test_config_save_load_and_graph_application() {
 }
 
 void test_experiment_result_persistence() {
-    pbl::services::FileStorageService storage;
+    pbl::engine::FileStorageEngine storage;
     string temp_exp_file = "test_temp_experiment.json";
 
-    pbl::services::FileStorageService::ExperimentResult result;
+    pbl::engine::FileStorageEngine::ExperimentResult result;
     result.experiment_id = "EXP-20261028-001";
     result.outcome = "SUCCESS";
     result.total_ticks = 425;
@@ -202,11 +202,11 @@ void test_experiment_result_persistence() {
     result.config.chunk_size = 1024;
     result.config.source_client_id = 1;
     result.config.destination_client_id = 3;
-    result.config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(1, "Client1", "Client"));
-    result.config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(2, "Router1", "Router"));
-    result.config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(3, "Client2", "Client"));
-    result.config.links.push_back(pbl::services::FileStorageService::LinkConfig(1, 2, 100, 10, 0.0, 0.0, 10));
-    result.config.links.push_back(pbl::services::FileStorageService::LinkConfig(2, 3, 100, 10, 0.0, 0.0, 10));
+    result.config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(1, "Client1", "Client"));
+    result.config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(2, "Router1", "Router"));
+    result.config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(3, "Client2", "Client"));
+    result.config.links.push_back(pbl::engine::FileStorageEngine::LinkConfig(1, 2, 100, 10, 0.0, 0.0, 10));
+    result.config.links.push_back(pbl::engine::FileStorageEngine::LinkConfig(2, 3, 100, 10, 0.0, 0.0, 10));
 
     result.simulation_stats.sent_count = 10;
     result.simulation_stats.delivered_count = 10;
@@ -228,7 +228,7 @@ void test_experiment_result_persistence() {
     storage.save_experiment_result(temp_exp_file, result);
 
     // Load experiment result
-    pbl::services::FileStorageService::ExperimentResult loaded = storage.load_experiment_result(temp_exp_file);
+    pbl::engine::FileStorageEngine::ExperimentResult loaded = storage.load_experiment_result(temp_exp_file);
 
     TEST_ASSERT(loaded.experiment_id == "EXP-20261028-001", "Loaded experiment ID matches");
     TEST_ASSERT(loaded.outcome == "SUCCESS", "Loaded outcome matches");
@@ -250,13 +250,13 @@ void test_experiment_result_persistence() {
 }
 
 void test_invalid_topology_rejection() {
-    pbl::services::FileStorageService storage;
+    pbl::engine::FileStorageEngine storage;
 
     // Config references link with non-existent node ID 99
-    pbl::services::FileStorageService::SimulationConfig bad_config;
-    bad_config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(1, "Client1", "Client"));
-    bad_config.nodes.push_back(pbl::services::FileStorageService::NodeConfig(2, "Client2", "Client"));
-    bad_config.links.push_back(pbl::services::FileStorageService::LinkConfig(1, 99, 100, 10, 0.0, 0.0, 10));
+    pbl::engine::FileStorageEngine::SimulationConfig bad_config;
+    bad_config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(1, "Client1", "Client"));
+    bad_config.nodes.push_back(pbl::engine::FileStorageEngine::NodeConfig(2, "Client2", "Client"));
+    bad_config.links.push_back(pbl::engine::FileStorageEngine::LinkConfig(1, 99, 100, 10, 0.0, 0.0, 10));
 
     pbl::model::NetworkGraph graph;
     bool threw = false;

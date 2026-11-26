@@ -11,15 +11,15 @@
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 4: Core logic — Dijkstra routing
-// RoutingService calculates the lowest-cost path between nodes using Dijkstra's algorithm.
+// RoutingEngine calculates the lowest-cost path between nodes using Dijkstra's algorithm.
 // It centralizes the non-negative combined link cost formula (latency, bandwidth, loss probability),
 // uses the custom PriorityQueue for min-priority scheduling via inverted priorities,
 // properly discards stale priority queue entries, and guarantees that failed nodes or links
 // are never selected.
-class RoutingService {
+class RoutingEngine {
 public:
     // Route result for pathfinding between a source and destination
     struct Route {
@@ -77,8 +77,8 @@ public:
         }
     };
 
-    RoutingService();
-    // RoutingService does not own dynamically allocated memory, so no custom destructor is needed.
+    RoutingEngine();
+    // RoutingEngine does not own dynamically allocated memory, so no custom destructor is needed.
 
     // Centralized cost formula:
     // cost = (weight_latency * latency) + (weight_bandwidth * (reference_bandwidth / bandwidth)) + (weight_loss * loss_probability * 100.0)

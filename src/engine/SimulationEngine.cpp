@@ -1,18 +1,18 @@
 #include <bits/stdc++.h>
 
-#include "services/RoutingService.h"
-#include "services/SimulationService.h"
+#include "engine/RoutingEngine.h"
+#include "engine/SimulationEngine.h"
 
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 5, 8 & 9: Core logic — Queues, fixed-tick simulation, loss, failure detection, and rerouting
 // Constructor initializes simulator fields in body to keep syntax beginner-friendly.
-SimulationService::SimulationService() {
+SimulationEngine::SimulationEngine() {
     graph_ = nullptr;
-    routing_service_ = nullptr;
+    routing_engine_ = nullptr;
     state_ = State::STOPPED;
     current_tick_ = 0;
     heartbeat_enabled_ = false;
@@ -21,24 +21,24 @@ SimulationService::SimulationService() {
     rng_.seed(12345);
 }
 
-void SimulationService::set_network_graph(model::NetworkGraph* graph) {
+void SimulationEngine::set_network_graph(model::NetworkGraph* graph) {
     graph_ = graph;
 }
 
-model::NetworkGraph* SimulationService::get_network_graph() const {
+model::NetworkGraph* SimulationEngine::get_network_graph() const {
     return graph_;
 }
 
 // Milestone 9: Routing service attachment
-void SimulationService::set_routing_service(RoutingService* routing) {
-    routing_service_ = routing;
+void SimulationEngine::set_routing_engine(RoutingEngine* routing) {
+    routing_engine_ = routing;
 }
 
-RoutingService* SimulationService::get_routing_service() const {
-    return routing_service_;
+RoutingEngine* SimulationEngine::get_routing_engine() const {
+    return routing_engine_;
 }
 
-void SimulationService::start() {
+void SimulationEngine::start() {
     state_ = State::RUNNING;
     if (graph_ != nullptr) {
         dsa::DynamicArray<int> router_ids = graph_->get_router_ids();
@@ -52,21 +52,21 @@ void SimulationService::start() {
     log_event("[SIMULATION] Started at tick " + to_string(current_tick_));
 }
 
-void SimulationService::pause() {
+void SimulationEngine::pause() {
     if (state_ == State::RUNNING) {
         state_ = State::PAUSED;
         log_event("[SIMULATION] Paused at tick " + to_string(current_tick_));
     }
 }
 
-void SimulationService::resume() {
+void SimulationEngine::resume() {
     if (state_ == State::PAUSED) {
         state_ = State::RUNNING;
         log_event("[SIMULATION] Resumed at tick " + to_string(current_tick_));
     }
 }
 
-void SimulationService::reset() {
+void SimulationEngine::reset() {
     state_ = State::STOPPED;
     current_tick_ = 0;
     statistics_ = Statistics();
@@ -88,21 +88,21 @@ void SimulationService::reset() {
     log_event("[SIMULATION] Reset to tick 0");
 }
 
-SimulationService::State SimulationService::get_state() const {
+SimulationEngine::State SimulationEngine::get_state() const {
     return state_;
 }
 
-bool SimulationService::is_running() const {
+bool SimulationEngine::is_running() const {
     return state_ == State::RUNNING;
 }
 
-int SimulationService::get_current_tick() const {
+int SimulationEngine::get_current_tick() const {
     return current_tick_;
 }
 
 // Bandwidth serialization delay formula:
 // transmission_time = ceiling(packet_size / bandwidth)
-int SimulationService::calculate_transmission_time(int packet_size_bytes, int bandwidth_bytes_per_ms) const {
+int SimulationEngine::calculate_transmission_time(int packet_size_bytes, int bandwidth_bytes_per_ms) const {
     if (bandwidth_bytes_per_ms <= 0) {
         bandwidth_bytes_per_ms = 1;
     }
@@ -114,7 +114,7 @@ int SimulationService::calculate_transmission_time(int packet_size_bytes, int ba
 }
 
 // Sends a packet directly across a single physical link
-bool SimulationService::send_packet(int from_node_id, int to_node_id, const model::Packet& packet) {
+bool SimulationEngine::send_packet(int from_node_id, int to_node_id, const model::Packet& packet) {
     if (graph_ == nullptr) {
         return false;
     }
@@ -161,7 +161,7 @@ bool SimulationService::send_packet(int from_node_id, int to_node_id, const mode
 }
 
 // Sends a packet along an explicit multi-hop route
-bool SimulationService::send_packet_along_route(const dsa::DynamicArray<int>& route, const model::Packet& packet) {
+bool SimulationEngine::send_packet_along_route(const dsa::DynamicArray<int>& route, const model::Packet& packet) {
     if (route.size() < 2) {
         return false;
     }
@@ -178,7 +178,7 @@ bool SimulationService::send_packet_along_route(const dsa::DynamicArray<int>& ro
 // 3. In-flight arrival: Packets whose arrival_tick <= current_tick_ reach their target node.
 // 4. Link queue dispatch: Each active, non-busy link dequeues its highest-priority packet,
 //    computes serialization transmission time and latency, and launches it into flight.
-void SimulationService::tick() {
+void SimulationEngine::tick() {
     if (graph_ == nullptr) {
         current_tick_++;
         return;
@@ -224,7 +224,7 @@ void SimulationService::tick() {
             }
 
             // Check whether packet reached its final destination or requires forwarding
-            if (arrived.to_node_id == arrived.packet.get_destination_id() || routing_service_ == nullptr) {
+            if (arrived.to_node_id == arrived.packet.get_destination_id() || routing_engine_ == nullptr) {
                 // Packet successfully reached its target for this hop / final destination
                 delivered_packets_.push_back(arrived.packet);
                 statistics_.delivered_count++;
@@ -234,7 +234,7 @@ void SimulationService::tick() {
             } else {
                 // Milestone 9: Packet reached an intermediate router node: forward along current best route
                 bool forwarded = false;
-                RoutingService::Route next_route = routing_service_->find_route(*graph_, arrived.to_node_id, arrived.packet.get_destination_id());
+                RoutingEngine::Route next_route = routing_engine_->find_route(*graph_, arrived.to_node_id, arrived.packet.get_destination_id());
                 if (next_route.found && next_route.path.size() >= 2) {
                     int next_hop = next_route.path[1];
                     forwarded = send_packet(arrived.to_node_id, next_hop, arrived.packet);
@@ -288,8 +288,8 @@ void SimulationService::tick() {
         } else if (link->get_first_node_id() == packet.get_destination_id()) {
             from_id = link->get_second_node_id();
             to_id = link->get_first_node_id();
-        } else if (routing_service_ != nullptr) {
-            RoutingService::Route r_from_first = routing_service_->find_route(*graph_, link->get_first_node_id(), packet.get_destination_id());
+        } else if (routing_engine_ != nullptr) {
+            RoutingEngine::Route r_from_first = routing_engine_->find_route(*graph_, link->get_first_node_id(), packet.get_destination_id());
             if (r_from_first.found && r_from_first.get_next_hop() == link->get_second_node_id()) {
                 from_id = link->get_first_node_id();
                 to_id = link->get_second_node_id();
@@ -369,34 +369,34 @@ void SimulationService::tick() {
     }
 }
 
-void SimulationService::advance_ticks(int count) {
+void SimulationEngine::advance_ticks(int count) {
     for (int i = 0; i < count; ++i) {
         tick();
     }
 }
 
-const dsa::DynamicArray<SimulationService::InFlightPacket>& SimulationService::get_in_flight_packets() const {
+const dsa::DynamicArray<SimulationEngine::InFlightPacket>& SimulationEngine::get_in_flight_packets() const {
     return in_flight_packets_;
 }
 
-int SimulationService::get_in_flight_count() const {
+int SimulationEngine::get_in_flight_count() const {
     return in_flight_packets_.size();
 }
 
-const dsa::DynamicArray<model::Packet>& SimulationService::get_delivered_packets() const {
+const dsa::DynamicArray<model::Packet>& SimulationEngine::get_delivered_packets() const {
     return delivered_packets_;
 }
 
-const SimulationService::Statistics& SimulationService::get_statistics() const {
+const SimulationEngine::Statistics& SimulationEngine::get_statistics() const {
     return statistics_;
 }
 
-const dsa::DynamicArray<string>& SimulationService::get_event_log() const {
+const dsa::DynamicArray<string>& SimulationEngine::get_event_log() const {
     return event_log_;
 }
 
 // Invariant: Packets affected by a failed node or link are dropped rather than moved invisibly.
-void SimulationService::process_node_failure(int node_id) {
+void SimulationEngine::process_node_failure(int node_id) {
     if (graph_ != nullptr) {
         graph_->fail_node(node_id);
     }
@@ -425,7 +425,7 @@ void SimulationService::process_node_failure(int node_id) {
     log_event("[FAILURE] Node " + to_string(node_id) + " failed. Affected packets purged.");
 }
 
-void SimulationService::process_link_failure(int first_node_id, int second_node_id) {
+void SimulationEngine::process_link_failure(int first_node_id, int second_node_id) {
     if (graph_ != nullptr) {
         graph_->fail_link(first_node_id, second_node_id);
     }
@@ -455,7 +455,7 @@ void SimulationService::process_link_failure(int first_node_id, int second_node_
               to_string(second_node_id) + ") failed. Affected packets purged.");
 }
 
-void SimulationService::drop_in_flight_at(int index, string reason) {
+void SimulationEngine::drop_in_flight_at(int index, string reason) {
     if (index >= 0 && index < in_flight_packets_.size()) {
         model::Packet pkt = in_flight_packets_[index].packet;
         in_flight_packets_[index] = in_flight_packets_[in_flight_packets_.size() - 1];
@@ -468,22 +468,22 @@ void SimulationService::drop_in_flight_at(int index, string reason) {
     }
 }
 
-void SimulationService::log_event(string message) {
+void SimulationEngine::log_event(string message) {
     event_log_.push_back(message);
 }
 
 // Milestone 8: Random seed for deterministic simulation experiments
-void SimulationService::set_random_seed(unsigned int seed) {
+void SimulationEngine::set_random_seed(unsigned int seed) {
     rng_.seed(seed);
 }
 
-double SimulationService::generate_random_probability() {
+double SimulationEngine::generate_random_probability() {
     uniform_real_distribution<double> dist(0.0, 1.0);
     return dist(rng_);
 }
 
 // Milestone 8: Manual packet loss and corruption injection
-void SimulationService::inject_link_loss(int from_node_id, int to_node_id) {
+void SimulationEngine::inject_link_loss(int from_node_id, int to_node_id) {
     if (graph_ != nullptr) {
         model::Link* link = graph_->get_link(from_node_id, to_node_id);
         if (link != nullptr) {
@@ -492,7 +492,7 @@ void SimulationService::inject_link_loss(int from_node_id, int to_node_id) {
     }
 }
 
-void SimulationService::inject_link_corruption(int from_node_id, int to_node_id) {
+void SimulationEngine::inject_link_corruption(int from_node_id, int to_node_id) {
     if (graph_ != nullptr) {
         model::Link* link = graph_->get_link(from_node_id, to_node_id);
         if (link != nullptr) {
@@ -502,14 +502,14 @@ void SimulationService::inject_link_corruption(int from_node_id, int to_node_id)
 }
 
 // Milestone 8: Manual node and link failures (takes effect immediately)
-void SimulationService::fail_node_manually(int node_id) {
+void SimulationEngine::fail_node_manually(int node_id) {
     log_event("[MANUAL_FAILURE] Tick " + to_string(current_tick_) +
               ": Node " + to_string(node_id) + " failed manually");
     statistics_.manual_failure_count++;
     process_node_failure(node_id);
 }
 
-void SimulationService::fail_link_manually(int first_node_id, int second_node_id) {
+void SimulationEngine::fail_link_manually(int first_node_id, int second_node_id) {
     log_event("[MANUAL_FAILURE] Tick " + to_string(current_tick_) +
               ": Link (" + to_string(first_node_id) + " - " + to_string(second_node_id) +
               ") failed manually");
@@ -518,7 +518,7 @@ void SimulationService::fail_link_manually(int first_node_id, int second_node_id
 }
 
 // Milestone 8: Heartbeat failure detection
-void SimulationService::set_heartbeat_enabled(bool enabled) {
+void SimulationEngine::set_heartbeat_enabled(bool enabled) {
     heartbeat_enabled_ = enabled;
     if (enabled && graph_ != nullptr) {
         dsa::DynamicArray<int> router_ids = graph_->get_router_ids();
@@ -531,55 +531,55 @@ void SimulationService::set_heartbeat_enabled(bool enabled) {
     }
 }
 
-bool SimulationService::is_heartbeat_enabled() const {
+bool SimulationEngine::is_heartbeat_enabled() const {
     return heartbeat_enabled_;
 }
 
-void SimulationService::set_heartbeat_interval(int interval_ms) {
+void SimulationEngine::set_heartbeat_interval(int interval_ms) {
     if (interval_ms <= 0) {
         throw invalid_argument("heartbeat interval must be positive");
     }
     heartbeat_interval_ = interval_ms;
 }
 
-int SimulationService::get_heartbeat_interval() const {
+int SimulationEngine::get_heartbeat_interval() const {
     return heartbeat_interval_;
 }
 
-void SimulationService::set_heartbeat_timeout(int timeout_ms) {
+void SimulationEngine::set_heartbeat_timeout(int timeout_ms) {
     if (timeout_ms <= 0) {
         throw invalid_argument("heartbeat timeout must be positive");
     }
     heartbeat_timeout_ = timeout_ms;
 }
 
-int SimulationService::get_heartbeat_timeout() const {
+int SimulationEngine::get_heartbeat_timeout() const {
     return heartbeat_timeout_;
 }
 
-void SimulationService::record_heartbeat(int node_id, int tick) {
+void SimulationEngine::record_heartbeat(int node_id, int tick) {
     last_heartbeat_tick_.put(node_id, tick);
 }
 
-int SimulationService::get_last_heartbeat_tick(int node_id) const {
+int SimulationEngine::get_last_heartbeat_tick(int node_id) const {
     if (last_heartbeat_tick_.contains(node_id)) {
         return last_heartbeat_tick_.at(node_id);
     }
     return 0;
 }
 
-void SimulationService::silence_node_heartbeat(int node_id) {
+void SimulationEngine::silence_node_heartbeat(int node_id) {
     silenced_heartbeats_.put(node_id, true);
 }
 
-bool SimulationService::is_node_heartbeat_silenced(int node_id) const {
+bool SimulationEngine::is_node_heartbeat_silenced(int node_id) const {
     if (silenced_heartbeats_.contains(node_id)) {
         return silenced_heartbeats_.at(node_id);
     }
     return false;
 }
 
-void SimulationService::resume_node_heartbeat(int node_id) {
+void SimulationEngine::resume_node_heartbeat(int node_id) {
     if (silenced_heartbeats_.contains(node_id)) {
         silenced_heartbeats_.put(node_id, false);
     }
@@ -589,7 +589,7 @@ void SimulationService::resume_node_heartbeat(int node_id) {
 // Internal heartbeat step called during tick()
 // Invariant: Heartbeat failure changes node/link availability only after the documented timeout,
 // unless a manual failure is requested.
-void SimulationService::process_heartbeats() {
+void SimulationEngine::process_heartbeats() {
     if (!heartbeat_enabled_ || graph_ == nullptr) {
         return;
     }

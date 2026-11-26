@@ -1,7 +1,7 @@
 #include <bits/stdc++.h>
 
 #include "model/Packet.h"
-#include "services/TransferService.h"
+#include "engine/TransferEngine.h"
 
 using namespace std;
 using namespace pbl;
@@ -10,12 +10,12 @@ namespace {
 
 // Milestone 6: Test file chunking, sequence numbering, and size calculations
 void test_chunking_and_sequence_tracking() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
 
     string content = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // 36 bytes
     int chunk_size = 10;
 
-    dsa::DynamicArray<pbl::services::TransferService::Chunk> chunks =
+    dsa::DynamicArray<pbl::engine::TransferEngine::Chunk> chunks =
         transfer.split_into_chunks(content, chunk_size);
 
     // 36 bytes with 10 bytes/chunk -> 4 chunks (10, 10, 10, 6)
@@ -38,7 +38,7 @@ void test_chunking_and_sequence_tracking() {
     assert(chunks[3].size == 6);
 
     // Empty content produces 0 chunks
-    dsa::DynamicArray<pbl::services::TransferService::Chunk> empty_chunks =
+    dsa::DynamicArray<pbl::engine::TransferEngine::Chunk> empty_chunks =
         transfer.split_into_chunks("", 10);
     assert(empty_chunks.empty());
 
@@ -54,7 +54,7 @@ void test_chunking_and_sequence_tracking() {
 
 // Milestone 6: Test educational XOR checksum calculation and corruption detection
 void test_xor_checksum_integrity_and_corruption_detection() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
 
     string original = "PacketPayloadData123";
     int checksum = transfer.calculate_xor_checksum(original);
@@ -77,12 +77,12 @@ void test_xor_checksum_integrity_and_corruption_detection() {
 
 // Milestone 6: Test out-of-order chunk arrival and ordered reconstruction
 void test_out_of_order_arrival_and_ordered_reconstruction() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
 
     string original_file = "The quick brown fox jumps over the lazy dog."; // 44 characters
     int chunk_size = 10; // Chunks: 0..4 (5 chunks)
 
-    dsa::DynamicArray<pbl::services::TransferService::Chunk> chunks =
+    dsa::DynamicArray<pbl::engine::TransferEngine::Chunk> chunks =
         transfer.split_into_chunks(original_file, chunk_size);
     assert(chunks.size() == 5);
 
@@ -133,9 +133,9 @@ void test_out_of_order_arrival_and_ordered_reconstruction() {
 
 // Milestone 6: Test that checksum mismatch rejects DATA and cannot be accepted
 void test_checksum_mismatch_rejects_data() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
 
-    pbl::services::TransferService::Chunk chunk(0, "ValidData", 9, 0);
+    pbl::engine::TransferEngine::Chunk chunk(0, "ValidData", 9, 0);
     chunk.checksum = transfer.calculate_xor_checksum(chunk.data);
 
     model::Packet packet = transfer.create_data_packet(1, 2, chunk);
@@ -155,7 +155,7 @@ void test_checksum_mismatch_rejects_data() {
 
 // Milestone 6: Test sender state initialization and inspection
 void test_sender_state() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
 
     string content = "HelloNetworkSimulator";
     transfer.init_sender(content, 5);
@@ -175,10 +175,10 @@ void test_sender_state() {
 
 // Milestone 6: Test duplicate chunk arrival idempotency
 void test_duplicate_chunks_idempotency() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_receiver(2);
 
-    pbl::services::TransferService::Chunk chunk0(0, "Part0", 5, 0);
+    pbl::engine::TransferEngine::Chunk chunk0(0, "Part0", 5, 0);
     chunk0.checksum = transfer.calculate_xor_checksum(chunk0.data);
     model::Packet pkt0 = transfer.create_data_packet(1, 2, chunk0);
 
@@ -194,10 +194,10 @@ void test_duplicate_chunks_idempotency() {
 
 // Milestone 7: Test individual ACK tracking, duplicate handling, and invariant checks
 void test_individual_ack_tracking() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("HelloACKTracker", 5); // 15 characters -> 3 chunks (5, 5, 5)
     assert(transfer.get_sender_chunk_count() == 3);
-    assert(transfer.get_transfer_status() == pbl::services::TransferService::TransferStatus::IDLE);
+    assert(transfer.get_transfer_status() == pbl::engine::TransferEngine::TransferStatus::IDLE);
 
     // Initial check: no chunk acknowledged
     assert(!transfer.is_chunk_acknowledged(0));
@@ -210,8 +210,8 @@ void test_individual_ack_tracking() {
     assert(pkt0.get_type() == model::Packet::Type::DATA);
     assert(pkt0.get_sequence_number() == 0);
     assert(transfer.get_chunk_attempts(0) == 1);
-    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::IN_FLIGHT);
-    assert(transfer.get_transfer_status() == pbl::services::TransferService::TransferStatus::IN_PROGRESS);
+    assert(transfer.get_chunk_state(0) == pbl::engine::TransferEngine::ChunkState::IN_FLIGHT);
+    assert(transfer.get_transfer_status() == pbl::engine::TransferEngine::TransferStatus::IN_PROGRESS);
 
     // Invariant: Non-ACK packets (e.g. DATA or ROUTE_PROBE) cannot mark chunks delivered
     model::Packet fake_data(model::Packet::Type::DATA, 2, 1, 0, "test", 4, 0);
@@ -226,7 +226,7 @@ void test_individual_ack_tracking() {
     model::Packet ack0 = transfer.create_ack_packet(2, 1, 0);
     assert(transfer.process_ack_packet(ack0));
     assert(transfer.is_chunk_acknowledged(0));
-    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::ACKNOWLEDGED);
+    assert(transfer.get_chunk_state(0) == pbl::engine::TransferEngine::ChunkState::ACKNOWLEDGED);
     assert(!transfer.is_transfer_completed()); // 1/3 acknowledged
 
     // Invariant: Duplicate ACK is ignored idempotently without inflating counts
@@ -245,7 +245,7 @@ void test_individual_ack_tracking() {
 
 // Milestone 7: Test that lost or corrupted DATA packet remains unacknowledged
 void test_unacknowledged_on_loss_or_corruption() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("IntegrityTestData", 10);
     transfer.init_receiver(transfer.get_sender_chunk_count());
 
@@ -265,7 +265,7 @@ void test_unacknowledged_on_loss_or_corruption() {
 
 // Milestone 7: Test timeout detection and retransmission walkthrough (Scenario: one timeout/retry)
 void test_timeout_and_retransmission_walkthrough() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("TestDataForRetransmission", 10); // 3 chunks
     transfer.init_receiver(3);
 
@@ -287,7 +287,7 @@ void test_timeout_and_retransmission_walkthrough() {
     dsa::DynamicArray<int> timeouts_at_100 = transfer.check_timeouts(100);
     assert(timeouts_at_100.size() == 1);
     assert(timeouts_at_100[0] == 0);
-    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::TIMED_OUT);
+    assert(transfer.get_chunk_state(0) == pbl::engine::TransferEngine::ChunkState::TIMED_OUT);
     assert(transfer.get_statistics().timeout_count == 1);
 
     // Retransmit chunk 0 at tick 100 (Attempt 2)
@@ -308,7 +308,7 @@ void test_timeout_and_retransmission_walkthrough() {
 
 // Milestone 7: Test retry limit reached and transfer failure (Scenario: retry-limit failure)
 void test_retry_limit_failure_walkthrough() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("FailureData", 10); // 2 chunks
 
     // Attempt 1 at tick 0
@@ -335,9 +335,9 @@ void test_retry_limit_failure_walkthrough() {
     // Invariant: The transfer fails after the final allowed attempt (3 attempts) and preserves evidence in statistics.
     assert(to3.empty()); // No more retransmissions allowed!
     assert(transfer.is_transfer_failed());
-    assert(transfer.get_chunk_state(0) == pbl::services::TransferService::ChunkState::FAILED);
+    assert(transfer.get_chunk_state(0) == pbl::engine::TransferEngine::ChunkState::FAILED);
 
-    const pbl::services::TransferService::TransferStatistics& stats = transfer.get_statistics();
+    const pbl::engine::TransferEngine::TransferStatistics& stats = transfer.get_statistics();
     assert(stats.sent_count == 3);
     assert(stats.retransmitted_count == 2);
     assert(stats.timeout_count == 3);
@@ -347,7 +347,7 @@ void test_retry_limit_failure_walkthrough() {
 
 // Milestone 7: Test that acknowledged chunks are not retransmitted unnecessarily after route failure
 void test_unacknowledged_chunks_after_route_failure() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("ABCDEFGHIJKLMNO", 5); // 3 chunks: seq 0, 1, 2
     assert(transfer.get_sender_chunk_count() == 3);
 

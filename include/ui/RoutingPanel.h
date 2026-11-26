@@ -6,7 +6,7 @@
 #define PBL_RESTORE_EMIT_RP
 #endif
 #include "model/NetworkGraph.h"
-#include "services/RoutingService.h"
+#include "engine/RoutingEngine.h"
 #ifdef PBL_RESTORE_EMIT_RP
 #pragma pop_macro("emit")
 #undef PBL_RESTORE_EMIT_RP
@@ -29,13 +29,13 @@ public:
     explicit RoutingPanel(QWidget* parent = nullptr);
 
     void update_route_display(const model::NetworkGraph& graph,
-                              const services::RoutingService& routing_service,
+                              const engine::RoutingEngine& routing_service,
                               int source_id,
                               int destination_id,
-                              const services::RoutingService::Route& route);
+                              const engine::RoutingEngine::Route& route);
 
     void update_queue_table(const model::NetworkGraph& graph,
-                            const services::RoutingService& routing_service);
+                            const engine::RoutingEngine& routing_service);
 
 private:
     QLabel* lbl_active_route_;
@@ -45,7 +45,7 @@ private:
     QTableWidget* table_queues_;
 
     void update_dijkstra_state_table(const model::NetworkGraph& graph,
-                                     const services::RoutingService& routing_service,
+                                     const engine::RoutingEngine& routing_service,
                                      int source_id);
     static void fit_table_height(QTableWidget* table, int min_height = 100);
 };

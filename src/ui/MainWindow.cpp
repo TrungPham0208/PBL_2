@@ -53,8 +53,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     xfer_dst_id_ = -1;
     xfer_chunk_size_ = 1024;
 
-    simulation_service_.set_network_graph(&graph_);
-    simulation_service_.set_routing_service(&routing_service_);
+    simulation_engine_.set_network_graph(&graph_);
+    simulation_engine_.set_routing_engine(&routing_engine_);
 
     setup_ui();
     setStyleSheet(build_dark_stylesheet());
@@ -77,9 +77,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 }
 
 model::NetworkGraph& MainWindow::get_network_graph() { return graph_; }
-services::RoutingService& MainWindow::get_routing_service() { return routing_service_; }
-services::SimulationService& MainWindow::get_simulation_service() { return simulation_service_; }
-services::TransferService& MainWindow::get_transfer_service() { return transfer_service_; }
+engine::RoutingEngine& MainWindow::get_routing_engine() { return routing_engine_; }
+engine::SimulationEngine& MainWindow::get_simulation_engine() { return simulation_engine_; }
+engine::TransferEngine& MainWindow::get_transfer_engine() { return transfer_engine_; }
 TopologyCanvas* MainWindow::get_canvas() { return canvas_; }
 
 void MainWindow::setup_ui() {
@@ -93,8 +93,8 @@ void MainWindow::setup_ui() {
     QSplitter* mid_splitter = new QSplitter(Qt::Horizontal, central);
     canvas_ = new TopologyCanvas(mid_splitter);
     canvas_->set_network_graph(&graph_);
-    canvas_->set_routing_service(&routing_service_);
-    canvas_->set_simulation_service(&simulation_service_);
+    canvas_->set_routing_engine(&routing_engine_);
+    canvas_->set_simulation_engine(&simulation_engine_);
 
     connect(canvas_, &TopologyCanvas::node_selected, this, &MainWindow::on_node_selected);
     connect(canvas_, &TopologyCanvas::link_selected, this, &MainWindow::on_link_selected);
@@ -125,7 +125,7 @@ void MainWindow::setup_ui() {
             canvas_->update();
             update_route_display();
             update_queue_table();
-            append_log_entry(simulation_service_.get_current_tick(), "Topology",
+            append_log_entry(simulation_engine_.get_current_tick(), "Topology",
                              "Connected link " + std::to_string(u) + " <-> " + std::to_string(v), "100 KB/s, 10 ms");
         }
     });
@@ -162,7 +162,7 @@ void MainWindow::setup_ui() {
             update_route_display();
             update_queue_table();
             on_link_selected(u, v);
-            append_log_entry(simulation_service_.get_current_tick(), "Topology",
+            append_log_entry(simulation_engine_.get_current_tick(), "Topology",
                              "Updated Link " + std::to_string(u) + " <-> " + std::to_string(v) +
                              " -> " + std::to_string(spin_lat->value()) + "ms, " + std::to_string(spin_bw->value()) + "KB/s",
                              "Dijkstra shortest path recalculated");
@@ -258,7 +258,7 @@ QWidget* MainWindow::create_top_toolbar() {
     };
 
     connect(btn_start_, &QPushButton::clicked, this, [this]() {
-        if (transfer_chunks_.empty() || transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
+        if (transfer_chunks_.empty() || transfer_engine_.is_transfer_completed() || transfer_engine_.is_transfer_failed()) {
             int src_id = transfer_panel_->selected_src_id();
             int dst_id = transfer_panel_->selected_dst_id();
             if (src_id != -1 && dst_id != -1 && src_id != dst_id) {
@@ -365,7 +365,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
         canvas_->update();
         update_route_display();
         update_queue_table();
-        append_log_entry(simulation_service_.get_current_tick(), "Topology",
+        append_log_entry(simulation_engine_.get_current_tick(), "Topology",
                          "Added " + type + " " + final_name + " (ID " + std::to_string(new_id) + ")", "");
     });
     connect(topology_panel_, &TopologyPanel::addLinkRequested, this, [this](int u, int v, int bw, int lat, double loss) {
@@ -378,7 +378,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
             canvas_->update();
             update_route_display();
             update_queue_table();
-            append_log_entry(simulation_service_.get_current_tick(), "Topology",
+            append_log_entry(simulation_engine_.get_current_tick(), "Topology",
                              "Added link " + std::to_string(u) + " <-> " + std::to_string(v),
                              std::to_string(bw) + " KB/s, " + std::to_string(lat) + " ms");
         }
@@ -432,7 +432,7 @@ QWidget* MainWindow::create_sidebar_tabs() {
         update_route_display();
         update_queue_table();
         on_link_selected(sel_link.first, sel_link.second);
-        append_log_entry(simulation_service_.get_current_tick(), "Topology",
+        append_log_entry(simulation_engine_.get_current_tick(), "Topology",
                          "Updated Link " + std::to_string(sel_link.first) + " <-> " + std::to_string(sel_link.second) +
                          " -> " + std::to_string(latency_ms) + "ms, " + std::to_string(bandwidth_kbps) + "KB/s",
                          "Dijkstra shortest path recalculated");
@@ -450,10 +450,10 @@ QWidget* MainWindow::create_sidebar_tabs() {
             active_source_id_ = src_id;
             active_destination_id_ = dst_id;
         }
-        services::RoutingService::Route r = routing_service_.find_route(graph_, src_id, dst_id);
+        engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, src_id, dst_id);
         if (!r.found || r.path.size() < 2) {
             demo_panel_->set_live_step_text("Route Probe failed: No reachable path between selected clients.");
-            append_log_entry(simulation_service_.get_current_tick(), "Probe", "Route Probe failed: No valid path", "");
+            append_log_entry(simulation_engine_.get_current_tick(), "Probe", "Route Probe failed: No valid path", "");
             return;
         }
         std::string route_trace;
@@ -465,8 +465,8 @@ QWidget* MainWindow::create_sidebar_tabs() {
         canvas_->set_active_route(r.path);
         update_route_display();
         model::Packet probe_pkt(model::Packet::Type::ROUTE_PROBE, src_id, dst_id, r.hop_count(), route_trace, 16);
-        simulation_service_.send_packet_along_route(r.path, probe_pkt);
-        append_log_entry(simulation_service_.get_current_tick(), "Probe",
+        simulation_engine_.send_packet_along_route(r.path, probe_pkt);
+        append_log_entry(simulation_engine_.get_current_tick(), "Probe",
                          "Dispatched Hop-by-Hop ROUTE_PROBE (" + std::to_string(src_id) + " -> " + std::to_string(dst_id) + ")",
                          "Expected Trace: " + route_trace);
         demo_watch_stage_ = 20;
@@ -532,31 +532,31 @@ void MainWindow::on_speed_changed(int index) {
 }
 
 void MainWindow::handle_start_simulation() {
-    simulation_service_.start();
+    simulation_engine_.start();
     if (!sim_timer_->isActive()) {
         sim_timer_->start(sim_interval_ms_);
     }
     lbl_sim_status_->setText("Status: RUNNING");
     lbl_sim_status_->setStyleSheet("background-color: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; border-radius: 12px; padding: 4px 12px; font-weight: bold; font-size: 11px;");
-    append_log_entry(simulation_service_.get_current_tick(), "Simulation", "Simulation started", "");
+    append_log_entry(simulation_engine_.get_current_tick(), "Simulation", "Simulation started", "");
 }
 
 void MainWindow::handle_pause_simulation() {
-    simulation_service_.pause();
+    simulation_engine_.pause();
     sim_timer_->stop();
     lbl_sim_status_->setText("Status: PAUSED");
     lbl_sim_status_->setStyleSheet("background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid #f59e0b; border-radius: 12px; padding: 4px 12px; font-weight: bold; font-size: 11px;");
-    append_log_entry(simulation_service_.get_current_tick(), "Simulation", "Simulation paused", "");
+    append_log_entry(simulation_engine_.get_current_tick(), "Simulation", "Simulation paused", "");
 }
 
 void MainWindow::handle_resume_simulation() {
-    simulation_service_.resume();
+    simulation_engine_.resume();
     if (!sim_timer_->isActive()) {
         sim_timer_->start(sim_interval_ms_);
     }
     lbl_sim_status_->setText("Status: RUNNING");
     lbl_sim_status_->setStyleSheet("background-color: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; border-radius: 12px; padding: 4px 12px; font-weight: bold; font-size: 11px;");
-    append_log_entry(simulation_service_.get_current_tick(), "Simulation", "Simulation resumed", "");
+    append_log_entry(simulation_engine_.get_current_tick(), "Simulation", "Simulation resumed", "");
 }
 
 void MainWindow::handle_reset_simulation() {
@@ -572,7 +572,7 @@ void MainWindow::handle_reset_simulation() {
     demo_panel_->update_nav_buttons(0, 0, 0, false);
     transfer_panel_->update_nav_buttons(false, 0, 5, false);
 
-    simulation_service_.reset();
+    simulation_engine_.reset();
     active_source_id_ = -1;
     active_destination_id_ = -1;
     next_chunk_to_send_idx_ = 0;
@@ -600,10 +600,10 @@ void MainWindow::handle_single_tick() {
 
 void MainWindow::handle_advance_ticks(int tick_count) {
     for (int i = 0; i < tick_count; ++i) {
-        simulation_service_.tick();
+        simulation_engine_.tick();
         execute_transfer_step();
     }
-    lbl_sim_tick_->setText(QString("Tick: %1 ms").arg(simulation_service_.get_current_tick()));
+    lbl_sim_tick_->setText(QString("Tick: %1 ms").arg(simulation_engine_.get_current_tick()));
     canvas_->update();
     update_transfer_display();
     update_queue_table();
@@ -614,7 +614,7 @@ void MainWindow::on_simulation_timer_tick() {
     handle_advance_ticks(1);
 
     auto has_ack_in_flight = [this]() -> bool {
-        const dsa::DynamicArray<services::SimulationService::InFlightPacket>& pkts = simulation_service_.get_in_flight_packets();
+        const dsa::DynamicArray<engine::SimulationEngine::InFlightPacket>& pkts = simulation_engine_.get_in_flight_packets();
         for (int i = 0; i < pkts.size(); ++i) {
             if (pkts[i].packet.get_type() == model::Packet::Type::ACK) return true;
         }
@@ -622,27 +622,27 @@ void MainWindow::on_simulation_timer_tick() {
     };
 
     if (xfer_step_active_ && xfer_watch_stage_ != 0) {
-        auto stats = transfer_service_.get_statistics();
+        auto stats = transfer_engine_.get_statistics();
         if (xfer_watch_stage_ == 1) {
             if (has_ack_in_flight() || stats.acknowledged_count > 0 ||
-                transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
+                transfer_engine_.is_transfer_completed() || transfer_engine_.is_transfer_failed()) {
                 xfer_watch_stage_ = 0;
                 handle_pause_simulation();
                 transfer_panel_->set_guided_step_text(
                     "Step 3/6 — Data Arrived: The data packet reached the Destination! The receiver checked its verification code (no damage) and is ready to send a receipt (ACK) back.");
             }
         } else if (xfer_watch_stage_ == 2) {
-            if (stats.acknowledged_count > 0 || transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
+            if (stats.acknowledged_count > 0 || transfer_engine_.is_transfer_completed() || transfer_engine_.is_transfer_failed()) {
                 xfer_watch_stage_ = 0;
                 handle_pause_simulation();
                 transfer_panel_->set_guided_step_text(
                     "Step 4/6 — Delivery Confirmed: The Sender got the receipt (ACK) back! Piece #0 is now marked ACKNOWLEDGED (safely delivered).");
             }
         } else if (xfer_watch_stage_ == 3) {
-            if (transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) {
+            if (transfer_engine_.is_transfer_completed() || transfer_engine_.is_transfer_failed()) {
                 xfer_watch_stage_ = 0;
                 handle_pause_simulation();
-                if (transfer_service_.is_transfer_completed()) {
+                if (transfer_engine_.is_transfer_completed()) {
                     transfer_panel_->set_guided_step_text(
                         "Step 5/6 — All Pieces Sent: Every data piece has been delivered and confirmed! Click 'Next >' for the final summary.");
                 } else {
@@ -654,16 +654,16 @@ void MainWindow::on_simulation_timer_tick() {
     }
 
     if (demo_mode_ == 1 && demo_watch_stage_ != 0) {
-        auto stats = transfer_service_.get_statistics();
+        auto stats = transfer_engine_.get_statistics();
         if (demo_watch_stage_ == 1) {
-            if (has_ack_in_flight() || stats.acknowledged_count > 0 || transfer_service_.is_transfer_completed()) {
+            if (has_ack_in_flight() || stats.acknowledged_count > 0 || transfer_engine_.is_transfer_completed()) {
                 demo_watch_stage_ = 0;
                 handle_pause_simulation();
                 demo_panel_->set_live_step_text(
                     "Step 5/7 (Forward DATA): Chunk #0 DATA traveled Client1 -> Router3 -> ... -> Client2! Receiver emitted ACK.");
             }
         } else if (demo_watch_stage_ == 2) {
-            if (stats.acknowledged_count > 0 || transfer_service_.is_transfer_completed()) {
+            if (stats.acknowledged_count > 0 || transfer_engine_.is_transfer_completed()) {
                 demo_watch_stage_ = 0;
                 handle_pause_simulation();
                 demo_panel_->set_live_step_text(
@@ -674,21 +674,21 @@ void MainWindow::on_simulation_timer_tick() {
 
     if (demo_mode_ == 2 && demo_watch_stage_ != 0) {
         if (demo_watch_stage_ == 10) {
-            if (simulation_service_.get_current_tick() >= 16 || simulation_service_.get_in_flight_packets().empty()) {
+            if (simulation_engine_.get_current_tick() >= 16 || simulation_engine_.get_in_flight_packets().empty()) {
                 demo_watch_stage_ = 0;
                 handle_pause_simulation();
                 demo_panel_->set_live_step_text(
                     "Step 1/4: DATA packet reached the last-hop router! Client2 connects via these 2 highlighted last-hop links.");
             }
         } else if (demo_watch_stage_ == 11) {
-            if (simulation_service_.get_current_tick() >= 35 || simulation_service_.get_in_flight_packets().empty()) {
+            if (simulation_engine_.get_current_tick() >= 35 || simulation_engine_.get_in_flight_packets().empty()) {
                 demo_watch_stage_ = 0;
                 handle_pause_simulation();
                 demo_panel_->set_live_step_text(
                     "Step 2/4: Both last-hop links are severed! DATA packet cannot reach Client2 and is dropped.");
             }
         } else if (demo_watch_stage_ == 12) {
-            if (transfer_service_.is_transfer_failed() || simulation_service_.get_current_tick() >= 150) {
+            if (transfer_engine_.is_transfer_failed() || simulation_engine_.get_current_tick() >= 150) {
                 demo_watch_stage_ = 0;
                 handle_pause_simulation();
                 demo_panel_->set_live_step_text(
@@ -698,7 +698,7 @@ void MainWindow::on_simulation_timer_tick() {
     }
 
     if (demo_watch_stage_ == 20) {
-        if (simulation_service_.get_in_flight_packets().empty()) {
+        if (simulation_engine_.get_in_flight_packets().empty()) {
             demo_watch_stage_ = 0;
             handle_pause_simulation();
             demo_panel_->set_live_step_text(
@@ -788,18 +788,18 @@ void MainWindow::initialize_transfer_session(int src_id, int dst_id, const std::
     transfer_payload_ = payload;
     next_chunk_to_send_idx_ = 0;
 
-    transfer_service_.init_sender(payload, chunk_size);
-    transfer_service_.init_receiver(transfer_service_.get_sender_chunk_count());
-    transfer_chunks_ = transfer_service_.get_all_sender_chunks();
+    transfer_engine_.init_sender(payload, chunk_size);
+    transfer_engine_.init_receiver(transfer_engine_.get_sender_chunk_count());
+    transfer_chunks_ = transfer_engine_.get_all_sender_chunks();
 
-    services::RoutingService::Route r = routing_service_.find_route(graph_, src_id, dst_id);
+    engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, src_id, dst_id);
     canvas_->set_active_route(r.path);
     update_route_display();
 
     transfer_panel_->set_transfer_status_in_progress();
     transfer_panel_->populate_chunks(transfer_chunks_);
 
-    append_log_entry(simulation_service_.get_current_tick(), "Transfer",
+    append_log_entry(simulation_engine_.get_current_tick(), "Transfer",
                      "Initialized transfer from Client " + std::to_string(src_id) + " to Client " + std::to_string(dst_id),
                      std::to_string(transfer_chunks_.size()) + " chunks");
 
@@ -814,15 +814,15 @@ void MainWindow::handle_start_file_transfer(int src_id, int dst_id, const std::s
 
 void MainWindow::execute_transfer_step() {
     if (active_source_id_ == -1 || active_destination_id_ == -1) return;
-    if (transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) return;
+    if (transfer_engine_.is_transfer_completed() || transfer_engine_.is_transfer_failed()) return;
 
-    int current_tick = simulation_service_.get_current_tick();
+    int current_tick = simulation_engine_.get_current_tick();
 
     if (next_chunk_to_send_idx_ < transfer_chunks_.size()) {
-        services::RoutingService::Route r = routing_service_.find_route(graph_, active_source_id_, active_destination_id_);
+        engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, active_source_id_, active_destination_id_);
         if (r.found && r.path.size() >= 2) {
-            model::Packet pkt = transfer_service_.send_chunk(next_chunk_to_send_idx_, active_source_id_, active_destination_id_, current_tick);
-            simulation_service_.send_packet_along_route(r.path, pkt);
+            model::Packet pkt = transfer_engine_.send_chunk(next_chunk_to_send_idx_, active_source_id_, active_destination_id_, current_tick);
+            simulation_engine_.send_packet_along_route(r.path, pkt);
             append_log_entry(current_tick, "Sender",
                              "Dispatched Chunk #" + std::to_string(next_chunk_to_send_idx_),
                              "Hops: " + std::to_string(r.hop_count()));
@@ -830,37 +830,37 @@ void MainWindow::execute_transfer_step() {
         }
     }
 
-    dsa::DynamicArray<int> timed_out = transfer_service_.check_timeouts(current_tick);
+    dsa::DynamicArray<int> timed_out = transfer_engine_.check_timeouts(current_tick);
     for (int i = 0; i < timed_out.size(); ++i) {
         int seq = timed_out[i];
-        services::RoutingService::Route r = routing_service_.find_route(graph_, active_source_id_, active_destination_id_);
-        model::Packet pkt = transfer_service_.send_chunk(seq, active_source_id_, active_destination_id_, current_tick);
+        engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, active_source_id_, active_destination_id_);
+        model::Packet pkt = transfer_engine_.send_chunk(seq, active_source_id_, active_destination_id_, current_tick);
         if (r.found && r.path.size() >= 2) {
-            simulation_service_.send_packet_along_route(r.path, pkt);
+            simulation_engine_.send_packet_along_route(r.path, pkt);
             append_log_entry(current_tick, "Retransmit",
                              "Timeout! Retrying Chunk #" + std::to_string(seq) + " over route",
-                             "Attempt #" + std::to_string(transfer_service_.get_chunk_progress(seq).attempts));
+                             "Attempt #" + std::to_string(transfer_engine_.get_chunk_progress(seq).attempts));
         } else {
             append_log_entry(current_tick, "Retransmit",
                              "Timeout for Chunk #" + std::to_string(seq) + " (No route available)",
-                             "Attempt #" + std::to_string(transfer_service_.get_chunk_progress(seq).attempts));
+                             "Attempt #" + std::to_string(transfer_engine_.get_chunk_progress(seq).attempts));
         }
     }
 
-    const dsa::DynamicArray<model::Packet>& delivered = simulation_service_.get_delivered_packets();
+    const dsa::DynamicArray<model::Packet>& delivered = simulation_engine_.get_delivered_packets();
     while (last_processed_delivered_idx_ < delivered.size()) {
         const model::Packet& pkt = delivered[last_processed_delivered_idx_++];
 
         if (pkt.get_type() == model::Packet::Type::DATA && pkt.get_destination_id() == active_destination_id_) {
-            bool valid = transfer_service_.receive_chunk_packet(pkt);
+            bool valid = transfer_engine_.receive_chunk_packet(pkt);
             if (valid) {
                 append_log_entry(current_tick, "Receiver",
                                  "Verified Chunk #" + std::to_string(pkt.get_sequence_number()) + " checksum. Emitting ACK.",
                                  "Seq: " + std::to_string(pkt.get_sequence_number()));
-                services::RoutingService::Route ack_r = routing_service_.find_route(graph_, active_destination_id_, active_source_id_);
+                engine::RoutingEngine::Route ack_r = routing_engine_.find_route(graph_, active_destination_id_, active_source_id_);
                 if (ack_r.found && ack_r.path.size() >= 2) {
-                    model::Packet ack_pkt = transfer_service_.create_ack_packet(active_destination_id_, active_source_id_, pkt.get_sequence_number());
-                    simulation_service_.send_packet_along_route(ack_r.path, ack_pkt);
+                    model::Packet ack_pkt = transfer_engine_.create_ack_packet(active_destination_id_, active_source_id_, pkt.get_sequence_number());
+                    simulation_engine_.send_packet_along_route(ack_r.path, ack_pkt);
                 }
             } else {
                 append_log_entry(current_tick, "Receiver",
@@ -868,14 +868,14 @@ void MainWindow::execute_transfer_step() {
                                  "Corruption detected");
             }
         } else if (pkt.get_type() == model::Packet::Type::ACK && pkt.get_destination_id() == active_source_id_) {
-            bool acked = transfer_service_.process_ack_packet(pkt);
+            bool acked = transfer_engine_.process_ack_packet(pkt);
             if (acked) {
                 append_log_entry(current_tick, "Sender",
                                  "Received ACK for Chunk #" + std::to_string(pkt.get_sequence_number()),
                                  "Seq: " + std::to_string(pkt.get_sequence_number()));
             }
-            if (acked && transfer_service_.is_transfer_completed() && transfer_service_.is_reconstruction_ready()) {
-                std::string reconstructed = transfer_service_.reconstruct_file();
+            if (acked && transfer_engine_.is_transfer_completed() && transfer_engine_.is_reconstruction_ready()) {
+                std::string reconstructed = transfer_engine_.reconstruct_file();
                 append_log_entry(current_tick, "Transfer",
                                  "Transfer COMPLETED successfully! Reconstructed " + std::to_string(reconstructed.size()) + " bytes.",
                                  "Integrity 100%");
@@ -941,12 +941,12 @@ void MainWindow::handle_toggle_failure_selected() {
         model::Node* n = graph_.get_node(sel_node);
         if (n) {
             if (n->is_active()) {
-                simulation_service_.fail_node_manually(sel_node);
-                append_log_entry(simulation_service_.get_current_tick(), "Fault",
+                simulation_engine_.fail_node_manually(sel_node);
+                append_log_entry(simulation_engine_.get_current_tick(), "Fault",
                                  "Node " + std::to_string(sel_node) + " failed manually", "Dijkstra rerouting triggered");
             } else {
                 graph_.recover_node(sel_node);
-                append_log_entry(simulation_service_.get_current_tick(), "Fault",
+                append_log_entry(simulation_engine_.get_current_tick(), "Fault",
                                  "Node " + std::to_string(sel_node) + " recovered", "Topology restored");
             }
             on_node_selected(sel_node);
@@ -955,12 +955,12 @@ void MainWindow::handle_toggle_failure_selected() {
         const model::Link* l = graph_.get_link(sel_link.first, sel_link.second);
         if (l) {
             if (!l->is_failed()) {
-                simulation_service_.fail_link_manually(sel_link.first, sel_link.second);
-                append_log_entry(simulation_service_.get_current_tick(), "Fault",
+                simulation_engine_.fail_link_manually(sel_link.first, sel_link.second);
+                append_log_entry(simulation_engine_.get_current_tick(), "Fault",
                                  "Link (" + std::to_string(sel_link.first) + " - " + std::to_string(sel_link.second) + ") severed", "Dijkstra rerouting");
             } else {
                 graph_.recover_link(sel_link.first, sel_link.second);
-                append_log_entry(simulation_service_.get_current_tick(), "Fault",
+                append_log_entry(simulation_engine_.get_current_tick(), "Fault",
                                  "Link (" + std::to_string(sel_link.first) + " - " + std::to_string(sel_link.second) + ") recovered", "Link active");
             }
             on_link_selected(sel_link.first, sel_link.second);
@@ -974,8 +974,8 @@ void MainWindow::handle_toggle_failure_selected() {
 void MainWindow::handle_inject_loss_selected() {
     std::pair<int, int> sel_link = canvas_->get_selected_link();
     if (sel_link.first != -1) {
-        simulation_service_.inject_link_loss(sel_link.first, sel_link.second);
-        append_log_entry(simulation_service_.get_current_tick(), "Fault",
+        simulation_engine_.inject_link_loss(sel_link.first, sel_link.second);
+        append_log_entry(simulation_engine_.get_current_tick(), "Fault",
                          "Arming manual packet drop on Link (" + std::to_string(sel_link.first) + " - " + std::to_string(sel_link.second) + ")",
                          "Next packet will drop");
         fault_panel_->set_selected_info_html(
@@ -990,8 +990,8 @@ void MainWindow::handle_inject_loss_selected() {
 void MainWindow::handle_inject_corruption_selected() {
     std::pair<int, int> sel_link = canvas_->get_selected_link();
     if (sel_link.first != -1) {
-        simulation_service_.inject_link_corruption(sel_link.first, sel_link.second);
-        append_log_entry(simulation_service_.get_current_tick(), "Fault",
+        simulation_engine_.inject_link_corruption(sel_link.first, sel_link.second);
+        append_log_entry(simulation_engine_.get_current_tick(), "Fault",
                          "Arming manual packet corruption on Link (" + std::to_string(sel_link.first) + " - " + std::to_string(sel_link.second) + ")",
                          "Next packet will corrupt");
         fault_panel_->set_selected_info_html(
@@ -1019,26 +1019,26 @@ void MainWindow::refresh_client_combos() {
 void MainWindow::update_route_display() {
     if (active_source_id_ == -1 || active_destination_id_ == -1) {
         canvas_->set_active_route(dsa::DynamicArray<int>());
-        routing_panel_->update_route_display(graph_, routing_service_, -1, -1, services::RoutingService::Route());
+        routing_panel_->update_route_display(graph_, routing_engine_, -1, -1, engine::RoutingEngine::Route());
         return;
     }
-    services::RoutingService::Route r = routing_service_.find_route(graph_, active_source_id_, active_destination_id_);
+    engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, active_source_id_, active_destination_id_);
     canvas_->set_active_route(r.path);
-    routing_panel_->update_route_display(graph_, routing_service_, active_source_id_, active_destination_id_, r);
+    routing_panel_->update_route_display(graph_, routing_engine_, active_source_id_, active_destination_id_, r);
 }
 
 void MainWindow::update_queue_table() {
-    routing_panel_->update_queue_table(graph_, routing_service_);
+    routing_panel_->update_queue_table(graph_, routing_engine_);
 }
 
 void MainWindow::update_transfer_display() {
     if (active_source_id_ == -1) return;
-    transfer_panel_->update_progress(transfer_service_, transfer_chunks_);
+    transfer_panel_->update_progress(transfer_engine_, transfer_chunks_);
 }
 
 void MainWindow::update_statistics_display() {
-    services::SimulationService::Statistics sim_stats = simulation_service_.get_statistics();
-    services::TransferService::TransferStatistics tr_stats = transfer_service_.get_statistics();
+    engine::SimulationEngine::Statistics sim_stats = simulation_engine_.get_statistics();
+    engine::TransferEngine::TransferStatistics tr_stats = transfer_engine_.get_statistics();
 
     QString summary = QString("<span style='color:#94a3b8;'>Sent:</span> <b style='color:#38bdf8;'>%1</b>  |  "
                               "<span style='color:#94a3b8;'>Delivered:</span> <b style='color:#34d399;'>%2</b>  |  "
@@ -1095,11 +1095,11 @@ void MainWindow::append_log_entry(int tick, const std::string& source, const std
 
 void MainWindow::handle_save_config(const std::string& file_path) {
     try {
-        services::FileStorageService::SimulationConfig cfg =
-            storage_service_.extract_config_from_graph(
+        engine::FileStorageEngine::SimulationConfig cfg =
+            storage_engine_.extract_config_from_graph(
                 graph_, topology_panel_->seed(), transfer_panel_->chunk_size(), active_source_id_, active_destination_id_);
-        storage_service_.save_config(file_path, cfg);
-        append_log_entry(simulation_service_.get_current_tick(), "Storage", "Saved configuration to " + file_path, "");
+        storage_engine_.save_config(file_path, cfg);
+        append_log_entry(simulation_engine_.get_current_tick(), "Storage", "Saved configuration to " + file_path, "");
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Save Error", QString::fromStdString(e.what()));
     }
@@ -1107,17 +1107,17 @@ void MainWindow::handle_save_config(const std::string& file_path) {
 
 void MainWindow::handle_load_config(const std::string& file_path) {
     try {
-        services::FileStorageService::SimulationConfig cfg = storage_service_.load_config(file_path);
+        engine::FileStorageEngine::SimulationConfig cfg = storage_engine_.load_config(file_path);
         handle_reset_simulation();
         graph_ = model::NetworkGraph();
-        storage_service_.apply_config_to_graph(cfg, graph_);
+        storage_engine_.apply_config_to_graph(cfg, graph_);
         topology_modified_manually_ = true;
         canvas_->update_layout();
         refresh_client_combos();
         canvas_->update();
         update_route_display();
         update_queue_table();
-        append_log_entry(simulation_service_.get_current_tick(), "Storage", "Loaded configuration from " + file_path, "");
+        append_log_entry(simulation_engine_.get_current_tick(), "Storage", "Loaded configuration from " + file_path, "");
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Load Error", QString::fromStdString(e.what()));
     }
@@ -1125,14 +1125,14 @@ void MainWindow::handle_load_config(const std::string& file_path) {
 
 void MainWindow::handle_export_experiment_results(const std::string& file_path) {
     try {
-        services::FileStorageService::ExperimentResult result;
+        engine::FileStorageEngine::ExperimentResult result;
         result.experiment_id = "EXP-" + std::to_string(QDateTime::currentMSecsSinceEpoch());
-        result.outcome = transfer_service_.is_transfer_completed() ? "SUCCESS" : "FAILURE";
-        result.total_ticks = simulation_service_.get_current_tick();
-        result.config = storage_service_.extract_config_from_graph(
+        result.outcome = transfer_engine_.is_transfer_completed() ? "SUCCESS" : "FAILURE";
+        result.total_ticks = simulation_engine_.get_current_tick();
+        result.config = storage_engine_.extract_config_from_graph(
             graph_, topology_panel_->seed(), transfer_panel_->chunk_size(), active_source_id_, active_destination_id_);
-        result.simulation_stats = simulation_service_.get_statistics();
-        result.transfer_stats = transfer_service_.get_statistics();
+        result.simulation_stats = simulation_engine_.get_statistics();
+        result.transfer_stats = transfer_engine_.get_statistics();
 
         for (int r = 0; r < table_event_log_->rowCount(); ++r) {
             QString entry = QString("[%1] %2: %3 (%4)")
@@ -1142,8 +1142,8 @@ void MainWindow::handle_export_experiment_results(const std::string& file_path) 
                                 .arg(table_event_log_->item(r, 3)->text());
             result.packet_events.push_back(entry.toStdString());
         }
-        storage_service_.save_experiment_result(file_path, result);
-        append_log_entry(simulation_service_.get_current_tick(), "Storage", "Exported experiment report to " + file_path, result.outcome);
+        storage_engine_.save_experiment_result(file_path, result);
+        append_log_entry(simulation_engine_.get_current_tick(), "Storage", "Exported experiment report to " + file_path, result.outcome);
     } catch (const std::exception& e) {
         QMessageBox::critical(this, "Export Error", QString::fromStdString(e.what()));
     }
@@ -1161,9 +1161,9 @@ void MainWindow::handle_send_route_probe() {
         active_destination_id_ = dst_id;
     }
 
-    services::RoutingService::Route r = routing_service_.find_route(graph_, src_id, dst_id);
+    engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, src_id, dst_id);
     if (!r.found || r.path.size() < 2) {
-        append_log_entry(simulation_service_.get_current_tick(), "Probe", "Route Probe failed: No valid path", "");
+        append_log_entry(simulation_engine_.get_current_tick(), "Probe", "Route Probe failed: No valid path", "");
         return;
     }
 
@@ -1174,9 +1174,9 @@ void MainWindow::handle_send_route_probe() {
     }
 
     model::Packet probe_pkt(model::Packet::Type::ROUTE_PROBE, src_id, dst_id, r.hop_count(), route_trace, 16);
-    simulation_service_.send_packet_along_route(r.path, probe_pkt);
+    simulation_engine_.send_packet_along_route(r.path, probe_pkt);
 
-    append_log_entry(simulation_service_.get_current_tick(), "Probe",
+    append_log_entry(simulation_engine_.get_current_tick(), "Probe",
                      "Dispatched Hop-by-Hop ROUTE_PROBE (" + std::to_string(src_id) + " -> " + std::to_string(dst_id) + ")",
                      "Expected Trace: " + route_trace);
 
@@ -1199,11 +1199,11 @@ void MainWindow::handle_run_recovery_demonstration() {
     handle_start_file_transfer(1, 2, payload, 32);
     handle_advance_ticks(20);
 
-    services::RoutingService::Route r = routing_service_.find_route(graph_, 1, 2);
+    engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, 1, 2);
     if (r.found && r.path.size() >= 3) {
         int failed_router = r.path[1];
-        simulation_service_.fail_node_manually(failed_router);
-        append_log_entry(simulation_service_.get_current_tick(), "Demo 1",
+        simulation_engine_.fail_node_manually(failed_router);
+        append_log_entry(simulation_engine_.get_current_tick(), "Demo 1",
                          "INJECTED FAILURE: Disabled Router ID " + std::to_string(failed_router) + " mid-transfer!",
                          "Triggered immediate Dijkstra rerouting");
         update_route_display();
@@ -1211,8 +1211,8 @@ void MainWindow::handle_run_recovery_demonstration() {
 
     handle_advance_ticks(350);
 
-    if (transfer_service_.is_transfer_completed()) {
-        append_log_entry(simulation_service_.get_current_tick(), "Demo 1",
+    if (transfer_engine_.is_transfer_completed()) {
+        append_log_entry(simulation_engine_.get_current_tick(), "Demo 1",
                          "DEMO 1 SUCCESS: File reconstructed with 100% integrity despite failure!",
                          "Saved to data/experiments/demonstration_recovery.json");
         handle_export_experiment_results("data/experiments/demonstration_recovery.json");
@@ -1231,16 +1231,16 @@ void MainWindow::handle_run_retry_limit_demonstration() {
 
     const dsa::DynamicArray<int>& neighbors = graph_.get_neighbors(2);
     for (int i = 0; i < neighbors.size(); ++i) {
-        simulation_service_.fail_link_manually(2, neighbors[i]);
+        simulation_engine_.fail_link_manually(2, neighbors[i]);
     }
-    append_log_entry(simulation_service_.get_current_tick(), "Demo 2",
+    append_log_entry(simulation_engine_.get_current_tick(), "Demo 2",
                      "ISOLATED DESTINATION: Severed all links to Client 2", "Destination completely unreachable");
     update_route_display();
 
     handle_advance_ticks(350);
 
-    if (transfer_service_.is_transfer_failed()) {
-        append_log_entry(simulation_service_.get_current_tick(), "Demo 2",
+    if (transfer_engine_.is_transfer_failed()) {
+        append_log_entry(simulation_engine_.get_current_tick(), "Demo 2",
                          "DEMO 2 SUCCESS: Transfer correctly aborted after exceeding maximum retry limit (3 attempts)!",
                          "Evidence preserved in statistics");
         handle_export_experiment_results("data/experiments/demonstration_failure.json");
@@ -1371,10 +1371,10 @@ void MainWindow::apply_demo_step(int step) {
         active_source_id_ = 1;
         active_destination_id_ = 2;
         demo_failed_router_ = 4;
-        simulation_service_.fail_node_manually(demo_failed_router_);
+        simulation_engine_.fail_node_manually(demo_failed_router_);
         update_route_display();
 
-        services::RoutingService::Route r = routing_service_.find_route(graph_, 1, 2);
+        engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, 1, 2);
         demo_alt_route_ = r.path;
 
         if (demo_step_ == 0) {
@@ -1434,16 +1434,16 @@ void MainWindow::apply_demo_step(int step) {
             bool has_ack = false;
             for (int t = 0; t < 150; ++t) {
                 handle_advance_ticks(1);
-                const dsa::DynamicArray<services::SimulationService::InFlightPacket>& pkts = simulation_service_.get_in_flight_packets();
+                const dsa::DynamicArray<engine::SimulationEngine::InFlightPacket>& pkts = simulation_engine_.get_in_flight_packets();
                 for (int i = 0; i < pkts.size(); ++i) {
                     if (pkts[i].packet.get_type() == model::Packet::Type::ACK) {
                         has_ack = true;
                         break;
                     }
                 }
-                if (has_ack || transfer_service_.get_statistics().acknowledged_count > 0) break;
+                if (has_ack || transfer_engine_.get_statistics().acknowledged_count > 0) break;
             }
-            if (has_ack && transfer_service_.get_statistics().acknowledged_count == 0) {
+            if (has_ack && transfer_engine_.get_statistics().acknowledged_count == 0) {
                 demo_watch_stage_ = 2;
                 handle_start_simulation();
                 demo_panel_->set_live_step_text("Step 6/7 (Reverse ACK In-Flight): Watching ACK return Client2 -> ... -> Router3 -> Client1...");
@@ -1455,8 +1455,8 @@ void MainWindow::apply_demo_step(int step) {
             std::string payload = "Demonstration Payload for PBL2 Simulator: Verifying seamless retransmission and Dijkstra dynamic rerouting upon network failure!";
             initialize_transfer_session(1, 2, payload, 32, false);
             handle_advance_ticks(370);
-            if (transfer_service_.is_transfer_completed()) {
-                append_log_entry(simulation_service_.get_current_tick(), "Demo 1",
+            if (transfer_engine_.is_transfer_completed()) {
+                append_log_entry(simulation_engine_.get_current_tick(), "Demo 1",
                                  "DEMO 1 SUCCESS: File reconstructed with 100% integrity despite failure!",
                                  "Saved to data/experiments/demonstration_recovery.json");
                 handle_export_experiment_results("data/experiments/demonstration_recovery.json");
@@ -1492,7 +1492,7 @@ void MainWindow::apply_demo_step(int step) {
             handle_advance_ticks(15);
             QVector<TopologyCanvas::ProbeEdge> probes;
             for (int i = 0; i < neighbors.size(); ++i) {
-                simulation_service_.fail_link_manually(2, neighbors[i]);
+                simulation_engine_.fail_link_manually(2, neighbors[i]);
                 probes.push_back({2, neighbors[i], 1, "X Link Severed"});
             }
             canvas_->set_probe_visuals(probes);
@@ -1503,7 +1503,7 @@ void MainWindow::apply_demo_step(int step) {
         } else if (demo_step_ == 2) {
             handle_advance_ticks(15);
             for (int i = 0; i < neighbors.size(); ++i) {
-                simulation_service_.fail_link_manually(2, neighbors[i]);
+                simulation_engine_.fail_link_manually(2, neighbors[i]);
             }
             canvas_->clear_probe_visuals();
             update_route_display();
@@ -1512,13 +1512,13 @@ void MainWindow::apply_demo_step(int step) {
             demo_panel_->set_live_step_text("Step 3/4: Watching unacknowledged packet time out and trigger automatic retries (1..3)...");
         } else {
             for (int i = 0; i < neighbors.size(); ++i) {
-                simulation_service_.fail_link_manually(2, neighbors[i]);
+                simulation_engine_.fail_link_manually(2, neighbors[i]);
             }
             canvas_->clear_probe_visuals();
             update_route_display();
             handle_advance_ticks(360);
-            if (transfer_service_.is_transfer_failed()) {
-                append_log_entry(simulation_service_.get_current_tick(), "Demo 2",
+            if (transfer_engine_.is_transfer_failed()) {
+                append_log_entry(simulation_engine_.get_current_tick(), "Demo 2",
                                  "DEMO 2 SUCCESS: Transfer correctly aborted after exceeding maximum retry limit (3 attempts)!",
                                  "Evidence preserved in statistics");
                 handle_export_experiment_results("data/experiments/demonstration_failure.json");
@@ -1593,7 +1593,7 @@ void MainWindow::apply_xfer_step(int step) {
 
     // IMPORTANT: Do NOT auto-start sim_timer_ during static guided steps (0, 1)
     initialize_transfer_session(xfer_src_id_, xfer_dst_id_, xfer_payload_, xfer_chunk_size_, false);
-    services::RoutingService::Route r = routing_service_.find_route(graph_, xfer_src_id_, xfer_dst_id_);
+    engine::RoutingEngine::Route r = routing_engine_.find_route(graph_, xfer_src_id_, xfer_dst_id_);
 
     if (xfer_step_ == 0) {
         update_transfer_display();
@@ -1632,18 +1632,18 @@ void MainWindow::apply_xfer_step(int step) {
         bool has_ack = false;
         for (int t = 0; t < 150; ++t) {
             handle_advance_ticks(1);
-            const dsa::DynamicArray<services::SimulationService::InFlightPacket>& pkts = simulation_service_.get_in_flight_packets();
+            const dsa::DynamicArray<engine::SimulationEngine::InFlightPacket>& pkts = simulation_engine_.get_in_flight_packets();
             for (int i = 0; i < pkts.size(); ++i) {
                 if (pkts[i].packet.get_type() == model::Packet::Type::ACK) {
                     has_ack = true;
                     break;
                 }
             }
-            if (has_ack || transfer_service_.get_statistics().acknowledged_count > 0 || transfer_service_.is_transfer_failed()) {
+            if (has_ack || transfer_engine_.get_statistics().acknowledged_count > 0 || transfer_engine_.is_transfer_failed()) {
                 break;
             }
         }
-        if (has_ack && transfer_service_.get_statistics().acknowledged_count == 0) {
+        if (has_ack && transfer_engine_.get_statistics().acknowledged_count == 0) {
             xfer_watch_stage_ = 2;
             handle_start_simulation();
             transfer_panel_->set_guided_step_text(
@@ -1656,13 +1656,13 @@ void MainWindow::apply_xfer_step(int step) {
         canvas_->clear_probe_visuals();
         for (int t = 0; t < 150; ++t) {
             handle_advance_ticks(1);
-            if (transfer_service_.get_statistics().acknowledged_count > 0 ||
-                transfer_service_.is_transfer_completed() ||
-                transfer_service_.is_transfer_failed()) {
+            if (transfer_engine_.get_statistics().acknowledged_count > 0 ||
+                transfer_engine_.is_transfer_completed() ||
+                transfer_engine_.is_transfer_failed()) {
                 break;
             }
         }
-        if (!transfer_service_.is_transfer_completed() && !transfer_service_.is_transfer_failed()) {
+        if (!transfer_engine_.is_transfer_completed() && !transfer_engine_.is_transfer_failed()) {
             xfer_watch_stage_ = 3;
             handle_start_simulation();
             transfer_panel_->set_guided_step_text(
@@ -1674,10 +1674,10 @@ void MainWindow::apply_xfer_step(int step) {
     } else {
         canvas_->clear_probe_visuals();
         for (int t = 0; t < 400; ++t) {
-            if (transfer_service_.is_transfer_completed() || transfer_service_.is_transfer_failed()) break;
+            if (transfer_engine_.is_transfer_completed() || transfer_engine_.is_transfer_failed()) break;
             handle_advance_ticks(2);
         }
-        if (transfer_service_.is_transfer_completed()) {
+        if (transfer_engine_.is_transfer_completed()) {
             transfer_panel_->set_guided_step_text(
                 "Step 6/6 — Complete (100%): All pieces are ACKNOWLEDGED and joined back together into the exact original message with zero errors!");
         } else {
@@ -1738,13 +1738,13 @@ void MainWindow::handle_undo_topology() {
             graph_.add_router(sn.id, sn.name);
         }
         if (!sn.active) {
-            simulation_service_.fail_node_manually(sn.id);
+            simulation_engine_.fail_node_manually(sn.id);
         }
     }
     for (const SavedLink& sl : snap.links) {
         graph_.add_link(sl.u, sl.v, sl.bandwidth, sl.latency, sl.loss_prob, sl.corr_prob, sl.queue_cap);
         if (sl.failed) {
-            simulation_service_.fail_link_manually(sl.u, sl.v);
+            simulation_engine_.fail_link_manually(sl.u, sl.v);
         }
     }
 
@@ -1758,7 +1758,7 @@ void MainWindow::handle_undo_topology() {
     fault_panel_->reset_selection_prompt();
     topology_panel_->set_undo_enabled(!undo_stack_.empty());
 
-    append_log_entry(simulation_service_.get_current_tick(), "Topology",
+    append_log_entry(simulation_engine_.get_current_tick(), "Topology",
                      "Undid last topology change (restored nodes & links)",
                      "Remaining undo steps: " + std::to_string(undo_stack_.size()));
 }

@@ -1,15 +1,15 @@
 #include <bits/stdc++.h>
 
-#include "services/TransferService.h"
+#include "engine/TransferEngine.h"
 
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 6 & 7: Core logic — Chunking, checksums, reconstruction, and reliable transfer
 // Normalizing constructor: initialize member fields inside constructor body.
-TransferService::TransferService() {
+TransferEngine::TransferEngine() {
     total_expected_chunks_ = 0;
     ack_timeout_ms_ = DEFAULT_ACK_TIMEOUT;
     max_attempts_ = DEFAULT_MAX_ATTEMPTS;
@@ -20,7 +20,7 @@ TransferService::TransferService() {
 // Educational XOR checksum calculation over the byte payload.
 // Security Constraint: XOR is an educational checksum, NOT cryptographic protection.
 // CRC-32/IEEE is documented as a stronger non-cryptographic alternative, but is not implemented.
-int TransferService::calculate_xor_checksum(const string& data) const {
+int TransferEngine::calculate_xor_checksum(const string& data) const {
     int checksum = 0;
     int len = int(data.size());
     for (int i = 0; i < len; ++i) {
@@ -29,13 +29,13 @@ int TransferService::calculate_xor_checksum(const string& data) const {
     return checksum;
 }
 
-bool TransferService::verify_checksum(const string& data, int expected_checksum) const {
+bool TransferEngine::verify_checksum(const string& data, int expected_checksum) const {
     return calculate_xor_checksum(data) == expected_checksum;
 }
 
 // Splits the original file content into discrete chunks with stable sequence numbers and checksums.
-dsa::DynamicArray<TransferService::Chunk>
-TransferService::split_into_chunks(const string& file_content, int chunk_size) const {
+dsa::DynamicArray<TransferEngine::Chunk>
+TransferEngine::split_into_chunks(const string& file_content, int chunk_size) const {
     if (chunk_size <= 0) {
         throw invalid_argument("chunk size must be positive");
     }
@@ -65,19 +65,19 @@ TransferService::split_into_chunks(const string& file_content, int chunk_size) c
 }
 
 // Helper to wrap a chunk into a network DATA packet
-model::Packet TransferService::create_data_packet(int source_id, int destination_id, const Chunk& chunk) const {
+model::Packet TransferEngine::create_data_packet(int source_id, int destination_id, const Chunk& chunk) const {
     return model::Packet(model::Packet::Type::DATA, source_id, destination_id,
                          chunk.sequence_number, chunk.data, chunk.size, chunk.checksum);
 }
 
 // Helper to create an individual ACK packet confirming receipt of a chunk sequence
-model::Packet TransferService::create_ack_packet(int source_id, int destination_id, int sequence_number) const {
+model::Packet TransferEngine::create_ack_packet(int source_id, int destination_id, int sequence_number) const {
     return model::Packet(model::Packet::Type::ACK, source_id, destination_id,
                          sequence_number, "", 0, 0);
 }
 
 // Initializes the sender with file content and precomputed chunks
-void TransferService::init_sender(const string& file_content, int chunk_size) {
+void TransferEngine::init_sender(const string& file_content, int chunk_size) {
     sender_chunks_ = split_into_chunks(file_content, chunk_size);
     chunk_progress_.clear();
     for (int i = 0; i < sender_chunks_.size(); ++i) {
@@ -91,23 +91,23 @@ void TransferService::init_sender(const string& file_content, int chunk_size) {
     statistics_ = TransferStatistics();
 }
 
-int TransferService::get_sender_chunk_count() const {
+int TransferEngine::get_sender_chunk_count() const {
     return sender_chunks_.size();
 }
 
-const TransferService::Chunk& TransferService::get_sender_chunk(int sequence_number) const {
+const TransferEngine::Chunk& TransferEngine::get_sender_chunk(int sequence_number) const {
     if (sequence_number < 0 || sequence_number >= sender_chunks_.size()) {
         throw out_of_range("sender chunk sequence number out of range");
     }
     return sender_chunks_[sequence_number];
 }
 
-const dsa::DynamicArray<TransferService::Chunk>& TransferService::get_all_sender_chunks() const {
+const dsa::DynamicArray<TransferEngine::Chunk>& TransferEngine::get_all_sender_chunks() const {
     return sender_chunks_;
 }
 
 // Initializes receiver state expecting total_chunks discrete chunks
-void TransferService::init_receiver(int total_chunks) {
+void TransferEngine::init_receiver(int total_chunks) {
     if (total_chunks < 0) {
         throw invalid_argument("total chunks cannot be negative");
     }
@@ -119,7 +119,7 @@ void TransferService::init_receiver(int total_chunks) {
 // Receives and validates an incoming packet.
 // Invariant: A checksum mismatch rejects DATA and cannot produce a successful ACK.
 // Invariant: Chunks can arrive out of order and are placed into ordered storage by sequence number.
-bool TransferService::receive_chunk_packet(const model::Packet& packet) {
+bool TransferEngine::receive_chunk_packet(const model::Packet& packet) {
     if (packet.get_type() != model::Packet::Type::DATA) {
         return false;
     }
@@ -148,27 +148,27 @@ bool TransferService::receive_chunk_packet(const model::Packet& packet) {
     return true;
 }
 
-bool TransferService::has_chunk(int sequence_number) const {
+bool TransferEngine::has_chunk(int sequence_number) const {
     return received_chunks_.contains(sequence_number);
 }
 
-const TransferService::Chunk& TransferService::get_received_chunk(int sequence_number) const {
+const TransferEngine::Chunk& TransferEngine::get_received_chunk(int sequence_number) const {
     if (!received_chunks_.contains(sequence_number)) {
         throw out_of_range("chunk has not been received");
     }
     return received_chunks_.at(sequence_number);
 }
 
-int TransferService::get_received_chunk_count() const {
+int TransferEngine::get_received_chunk_count() const {
     return received_chunks_.size();
 }
 
-int TransferService::get_total_expected_chunks() const {
+int TransferEngine::get_total_expected_chunks() const {
     return total_expected_chunks_;
 }
 
 // Returns all missing sequence numbers in [0, total_expected_chunks_ - 1]
-dsa::DynamicArray<int> TransferService::get_missing_chunk_sequences() const {
+dsa::DynamicArray<int> TransferEngine::get_missing_chunk_sequences() const {
     dsa::DynamicArray<int> missing;
     for (int seq = 0; seq < total_expected_chunks_; ++seq) {
         if (!received_chunks_.contains(seq)) {
@@ -179,7 +179,7 @@ dsa::DynamicArray<int> TransferService::get_missing_chunk_sequences() const {
 }
 
 // Checks if all required chunks from 0 to total_expected_chunks - 1 are present
-bool TransferService::is_reconstruction_ready() const {
+bool TransferEngine::is_reconstruction_ready() const {
     if (total_expected_chunks_ == 0) {
         return true;
     }
@@ -196,7 +196,7 @@ bool TransferService::is_reconstruction_ready() const {
 
 // Invariant: Reconstruction returns the original bytes only when all required chunks are present and valid.
 // Reassembles chunks in strictly ascending sequence order regardless of arrival order.
-string TransferService::reconstruct_file() const {
+string TransferEngine::reconstruct_file() const {
     if (!is_reconstruction_ready()) {
         throw runtime_error("cannot reconstruct file: missing chunks");
     }
@@ -208,13 +208,13 @@ string TransferService::reconstruct_file() const {
     return reconstructed;
 }
 
-void TransferService::reset_receiver() {
+void TransferEngine::reset_receiver() {
     total_expected_chunks_ = 0;
     received_chunks_.clear();
     received_sequences_.clear();
 }
 
-void TransferService::reset_sender() {
+void TransferEngine::reset_sender() {
     sender_chunks_.clear();
     chunk_progress_.clear();
     transfer_status_ = TransferStatus::IDLE;
@@ -222,80 +222,80 @@ void TransferService::reset_sender() {
 }
 
 // Milestone 7: Configuration
-void TransferService::set_ack_timeout(int timeout_ms) {
+void TransferEngine::set_ack_timeout(int timeout_ms) {
     if (timeout_ms <= 0) {
         throw invalid_argument("ack timeout must be positive");
     }
     ack_timeout_ms_ = timeout_ms;
 }
 
-int TransferService::get_ack_timeout() const {
+int TransferEngine::get_ack_timeout() const {
     return ack_timeout_ms_;
 }
 
-void TransferService::set_max_attempts(int max_attempts) {
+void TransferEngine::set_max_attempts(int max_attempts) {
     if (max_attempts <= 0) {
         throw invalid_argument("max attempts must be positive");
     }
     max_attempts_ = max_attempts;
 }
 
-int TransferService::get_max_attempts() const {
+int TransferEngine::get_max_attempts() const {
     return max_attempts_;
 }
 
 // Milestone 7: Transfer progress and state queries
-TransferService::TransferStatus TransferService::get_transfer_status() const {
+TransferEngine::TransferStatus TransferEngine::get_transfer_status() const {
     return transfer_status_;
 }
 
-bool TransferService::is_transfer_completed() const {
+bool TransferEngine::is_transfer_completed() const {
     return transfer_status_ == TransferStatus::COMPLETED;
 }
 
-bool TransferService::is_transfer_failed() const {
+bool TransferEngine::is_transfer_failed() const {
     return transfer_status_ == TransferStatus::FAILED;
 }
 
-bool TransferService::is_chunk_acknowledged(int sequence_number) const {
+bool TransferEngine::is_chunk_acknowledged(int sequence_number) const {
     if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
         return false;
     }
     return chunk_progress_[sequence_number].acknowledged;
 }
 
-int TransferService::get_chunk_attempts(int sequence_number) const {
+int TransferEngine::get_chunk_attempts(int sequence_number) const {
     if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
         return 0;
     }
     return chunk_progress_[sequence_number].attempts;
 }
 
-TransferService::ChunkState TransferService::get_chunk_state(int sequence_number) const {
+TransferEngine::ChunkState TransferEngine::get_chunk_state(int sequence_number) const {
     if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
         return ChunkState::UNSENT;
     }
     return chunk_progress_[sequence_number].state;
 }
 
-const TransferService::ChunkProgress& TransferService::get_chunk_progress(int sequence_number) const {
+const TransferEngine::ChunkProgress& TransferEngine::get_chunk_progress(int sequence_number) const {
     if (sequence_number < 0 || sequence_number >= chunk_progress_.size()) {
         throw out_of_range("sequence number out of range");
     }
     return chunk_progress_[sequence_number];
 }
 
-const TransferService::TransferStatistics& TransferService::get_statistics() const {
+const TransferEngine::TransferStatistics& TransferEngine::get_statistics() const {
     return statistics_;
 }
 
-void TransferService::reset_statistics() {
+void TransferEngine::reset_statistics() {
     statistics_ = TransferStatistics();
 }
 
 // Milestone 7: Invariant: Acknowledged chunks are not retransmitted unnecessarily after a route failure
 // Returns only the sequence numbers of chunks that have not yet been successfully acknowledged.
-dsa::DynamicArray<int> TransferService::get_unacknowledged_chunks() const {
+dsa::DynamicArray<int> TransferEngine::get_unacknowledged_chunks() const {
     dsa::DynamicArray<int> unacknowledged;
     for (int i = 0; i < chunk_progress_.size(); ++i) {
         if (!chunk_progress_[i].acknowledged) {
@@ -307,7 +307,7 @@ dsa::DynamicArray<int> TransferService::get_unacknowledged_chunks() const {
 
 // Milestone 7: Sender packet dispatch with attempt tracking
 // Invariant: Acknowledged chunks are not retransmitted unnecessarily.
-model::Packet TransferService::send_chunk(int sequence_number, int source_id, int destination_id, int current_tick) {
+model::Packet TransferEngine::send_chunk(int sequence_number, int source_id, int destination_id, int current_tick) {
     if (sequence_number < 0 || sequence_number >= sender_chunks_.size()) {
         throw out_of_range("chunk sequence number out of range");
     }
@@ -334,7 +334,7 @@ model::Packet TransferService::send_chunk(int sequence_number, int source_id, in
 
 // Milestone 7: Invariant: Only a valid ACK for the matching chunk can mark that chunk delivered.
 // Invariant: A lost, corrupted, or missing DATA packet remains unacknowledged.
-bool TransferService::process_ack_packet(const model::Packet& packet) {
+bool TransferEngine::process_ack_packet(const model::Packet& packet) {
     if (packet.get_type() != model::Packet::Type::ACK) {
         return false;
     }
@@ -363,7 +363,7 @@ bool TransferService::process_ack_packet(const model::Packet& packet) {
 // Milestone 7: Invariant: Timeout checking and retry limits
 // Returns sequence numbers of chunks eligible for retransmission at current_tick.
 // Invariant: The transfer fails after the final allowed attempt (3 attempts) and preserves evidence in statistics.
-dsa::DynamicArray<int> TransferService::check_timeouts(int current_tick) {
+dsa::DynamicArray<int> TransferEngine::check_timeouts(int current_tick) {
     dsa::DynamicArray<int> retransmit_list;
 
     for (int seq = 0; seq < chunk_progress_.size(); ++seq) {

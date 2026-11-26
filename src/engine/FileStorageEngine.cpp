@@ -1,19 +1,19 @@
 #include <bits/stdc++.h>
 
-#include "services/FileStorageService.h"
+#include "engine/FileStorageEngine.h"
 
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 10: Core logic — JSON configuration and experiment persistence
 // Normalizing constructor
-FileStorageService::FileStorageService() {
+FileStorageEngine::FileStorageEngine() {
 }
 
 // JsonValue helper implementations
-bool FileStorageService::JsonValue::has_key(const string& key) const {
+bool FileStorageEngine::JsonValue::has_key(const string& key) const {
     if (type != JsonType::JSON_OBJECT) {
         return false;
     }
@@ -25,7 +25,7 @@ bool FileStorageService::JsonValue::has_key(const string& key) const {
     return false;
 }
 
-const FileStorageService::JsonValue& FileStorageService::JsonValue::get(const string& key) const {
+const FileStorageEngine::JsonValue& FileStorageEngine::JsonValue::get(const string& key) const {
     if (type != JsonType::JSON_OBJECT) {
         throw runtime_error("JSON value is not an object");
     }
@@ -37,42 +37,42 @@ const FileStorageService::JsonValue& FileStorageService::JsonValue::get(const st
     throw runtime_error("key not found in JSON object: " + key);
 }
 
-int FileStorageService::JsonValue::as_int() const {
+int FileStorageEngine::JsonValue::as_int() const {
     if (type != JsonType::JSON_NUMBER) {
         throw runtime_error("expected JSON number for integer conversion");
     }
     return int(number_value);
 }
 
-double FileStorageService::JsonValue::as_double() const {
+double FileStorageEngine::JsonValue::as_double() const {
     if (type != JsonType::JSON_NUMBER) {
         throw runtime_error("expected JSON number for double conversion");
     }
     return number_value;
 }
 
-string FileStorageService::JsonValue::as_string() const {
+string FileStorageEngine::JsonValue::as_string() const {
     if (type != JsonType::JSON_STRING) {
         throw runtime_error("expected JSON string");
     }
     return string_value;
 }
 
-bool FileStorageService::JsonValue::as_bool() const {
+bool FileStorageEngine::JsonValue::as_bool() const {
     if (type != JsonType::JSON_BOOL) {
         throw runtime_error("expected JSON boolean");
     }
     return bool_value;
 }
 
-void FileStorageService::skip_whitespace(const string& s, int& pos) const {
+void FileStorageEngine::skip_whitespace(const string& s, int& pos) const {
     int len = int(s.size());
     while (pos < len && (s[pos] == ' ' || s[pos] == '\t' || s[pos] == '\r' || s[pos] == '\n')) {
         pos++;
     }
 }
 
-string FileStorageService::escape_string(const string& s) const {
+string FileStorageEngine::escape_string(const string& s) const {
     string out = "";
     int len = int(s.size());
     for (int i = 0; i < len; ++i) {
@@ -94,7 +94,7 @@ string FileStorageService::escape_string(const string& s) const {
     return out;
 }
 
-string FileStorageService::parse_string(const string& s, int& pos) const {
+string FileStorageEngine::parse_string(const string& s, int& pos) const {
     int len = int(s.size());
     if (pos >= len || s[pos] != '"') {
         throw runtime_error("expected '\"' to begin JSON string");
@@ -125,7 +125,7 @@ string FileStorageService::parse_string(const string& s, int& pos) const {
     throw runtime_error("unterminated JSON string");
 }
 
-FileStorageService::JsonValue FileStorageService::parse_number(const string& s, int& pos) const {
+FileStorageEngine::JsonValue FileStorageEngine::parse_number(const string& s, int& pos) const {
     int start = pos;
     int len = int(s.size());
     if (pos < len && (s[pos] == '-' || s[pos] == '+')) {
@@ -165,7 +165,7 @@ FileStorageService::JsonValue FileStorageService::parse_number(const string& s, 
     return val;
 }
 
-FileStorageService::JsonValue FileStorageService::parse_array(const string& s, int& pos) const {
+FileStorageEngine::JsonValue FileStorageEngine::parse_array(const string& s, int& pos) const {
     int len = int(s.size());
     if (pos >= len || s[pos] != '[') {
         throw runtime_error("expected '[' for JSON array");
@@ -205,7 +205,7 @@ FileStorageService::JsonValue FileStorageService::parse_array(const string& s, i
     throw runtime_error("unterminated JSON array");
 }
 
-FileStorageService::JsonValue FileStorageService::parse_object(const string& s, int& pos) const {
+FileStorageEngine::JsonValue FileStorageEngine::parse_object(const string& s, int& pos) const {
     int len = int(s.size());
     if (pos >= len || s[pos] != '{') {
         throw runtime_error("expected '{' for JSON object");
@@ -260,7 +260,7 @@ FileStorageService::JsonValue FileStorageService::parse_object(const string& s, 
     throw runtime_error("unterminated JSON object");
 }
 
-FileStorageService::JsonValue FileStorageService::parse_value(const string& s, int& pos) const {
+FileStorageEngine::JsonValue FileStorageEngine::parse_value(const string& s, int& pos) const {
     skip_whitespace(s, pos);
     int len = int(s.size());
     if (pos >= len) {
@@ -316,7 +316,7 @@ FileStorageService::JsonValue FileStorageService::parse_value(const string& s, i
     throw runtime_error(string("unexpected character in JSON input: '") + c + "'");
 }
 
-FileStorageService::JsonValue FileStorageService::parse_json(const string& json_str) const {
+FileStorageEngine::JsonValue FileStorageEngine::parse_json(const string& json_str) const {
     int pos = 0;
     JsonValue root = parse_value(json_str, pos);
     skip_whitespace(json_str, pos);
@@ -326,7 +326,7 @@ FileStorageService::JsonValue FileStorageService::parse_json(const string& json_
     return root;
 }
 
-string FileStorageService::serialize_json(const JsonValue& value, int indent_level) const {
+string FileStorageEngine::serialize_json(const JsonValue& value, int indent_level) const {
     string indent = string(indent_level * 2, ' ');
     string next_indent = string((indent_level + 1) * 2, ' ');
 
@@ -382,7 +382,7 @@ string FileStorageService::serialize_json(const JsonValue& value, int indent_lev
     return "null";
 }
 
-FileStorageService::JsonValue FileStorageService::config_to_json(const SimulationConfig& config) const {
+FileStorageEngine::JsonValue FileStorageEngine::config_to_json(const SimulationConfig& config) const {
     JsonValue root;
     root.type = JsonType::JSON_OBJECT;
 
@@ -453,7 +453,7 @@ FileStorageService::JsonValue FileStorageService::config_to_json(const Simulatio
     return root;
 }
 
-FileStorageService::SimulationConfig FileStorageService::json_to_config(const JsonValue& json) const {
+FileStorageEngine::SimulationConfig FileStorageEngine::json_to_config(const JsonValue& json) const {
     // Invariant: Invalid or incomplete JSON is rejected clearly rather than silently producing unsafe defaults.
     if (!json.has_key("nodes") || !json.has_key("links")) {
         throw runtime_error("incomplete JSON configuration: missing required 'nodes' or 'links' field");
@@ -511,7 +511,7 @@ FileStorageService::SimulationConfig FileStorageService::json_to_config(const Js
     return config;
 }
 
-FileStorageService::JsonValue FileStorageService::experiment_to_json(const ExperimentResult& result) const {
+FileStorageEngine::JsonValue FileStorageEngine::experiment_to_json(const ExperimentResult& result) const {
     JsonValue root;
     root.type = JsonType::JSON_OBJECT;
 
@@ -572,7 +572,7 @@ FileStorageService::JsonValue FileStorageService::experiment_to_json(const Exper
     return root;
 }
 
-FileStorageService::ExperimentResult FileStorageService::json_to_experiment(const JsonValue& json) const {
+FileStorageEngine::ExperimentResult FileStorageEngine::json_to_experiment(const JsonValue& json) const {
     if (!json.has_key("experiment_id") || !json.has_key("outcome") || !json.has_key("statistics")) {
         throw runtime_error("incomplete experiment JSON: missing required fields");
     }
@@ -626,7 +626,7 @@ FileStorageService::ExperimentResult FileStorageService::json_to_experiment(cons
     return result;
 }
 
-void FileStorageService::save_config(const string& file_path, const SimulationConfig& config) const {
+void FileStorageEngine::save_config(const string& file_path, const SimulationConfig& config) const {
     filesystem::path p(file_path);
     if (p.has_parent_path()) {
         filesystem::create_directories(p.parent_path());
@@ -643,7 +643,7 @@ void FileStorageService::save_config(const string& file_path, const SimulationCo
     fout.close();
 }
 
-FileStorageService::SimulationConfig FileStorageService::load_config(const string& file_path) const {
+FileStorageEngine::SimulationConfig FileStorageEngine::load_config(const string& file_path) const {
     ifstream fin(file_path);
     if (!fin.is_open()) {
         throw runtime_error("cannot open file for reading: " + file_path);
@@ -661,7 +661,7 @@ FileStorageService::SimulationConfig FileStorageService::load_config(const strin
     return json_to_config(root);
 }
 
-void FileStorageService::apply_config_to_graph(const SimulationConfig& config, model::NetworkGraph& graph) const {
+void FileStorageEngine::apply_config_to_graph(const SimulationConfig& config, model::NetworkGraph& graph) const {
     graph.clear();
 
     // 1. Add nodes
@@ -686,8 +686,8 @@ void FileStorageService::apply_config_to_graph(const SimulationConfig& config, m
     }
 }
 
-FileStorageService::SimulationConfig
-FileStorageService::extract_config_from_graph(const model::NetworkGraph& graph,
+FileStorageEngine::SimulationConfig
+FileStorageEngine::extract_config_from_graph(const model::NetworkGraph& graph,
                                               int random_seed,
                                               int chunk_size,
                                               int source_id,
@@ -724,7 +724,7 @@ FileStorageService::extract_config_from_graph(const model::NetworkGraph& graph,
     return config;
 }
 
-void FileStorageService::save_experiment_result(const string& file_path, const ExperimentResult& result) const {
+void FileStorageEngine::save_experiment_result(const string& file_path, const ExperimentResult& result) const {
     filesystem::path p(file_path);
     if (p.has_parent_path()) {
         filesystem::create_directories(p.parent_path());
@@ -741,7 +741,7 @@ void FileStorageService::save_experiment_result(const string& file_path, const E
     fout.close();
 }
 
-FileStorageService::ExperimentResult FileStorageService::load_experiment_result(const string& file_path) const {
+FileStorageEngine::ExperimentResult FileStorageEngine::load_experiment_result(const string& file_path) const {
     ifstream fin(file_path);
     if (!fin.is_open()) {
         throw runtime_error("cannot open file for reading: " + file_path);

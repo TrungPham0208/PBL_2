@@ -14,8 +14,8 @@
 #include "model/Node.h"
 #include "model/Link.h"
 #include "pbl/dsa/DynamicArray.h"
-#include "services/RoutingService.h"
-#include "services/SimulationService.h"
+#include "engine/RoutingEngine.h"
+#include "engine/SimulationEngine.h"
 #ifdef PBL_RESTORE_EMIT_TC
 #pragma pop_macro("emit")
 #undef PBL_RESTORE_EMIT_TC
@@ -49,8 +49,8 @@ public:
     // TopologyCanvas does not own raw dynamically allocated unmanaged resources, so no custom destructor is needed.
 
     void set_network_graph(model::NetworkGraph* graph);
-    void set_routing_service(services::RoutingService* routing);
-    void set_simulation_service(services::SimulationService* simulation);
+    void set_routing_engine(engine::RoutingEngine* routing);
+    void set_simulation_engine(engine::SimulationEngine* simulation);
 
     void set_active_route(const dsa::DynamicArray<int>& route);
     void set_selected_node(int node_id);
@@ -98,8 +98,8 @@ protected:
 
 private:
     model::NetworkGraph* graph_;
-    services::RoutingService* routing_;
-    services::SimulationService* simulation_;
+    engine::RoutingEngine* routing_;
+    engine::SimulationEngine* simulation_;
 
     dsa::DynamicArray<int> active_route_;
     int selected_node_id_;

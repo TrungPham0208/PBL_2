@@ -185,7 +185,7 @@ void TransferPanel::set_transfer_status_in_progress() {
     progress_transfer_->setValue(0);
 }
 
-void TransferPanel::populate_chunks(const dsa::DynamicArray<services::TransferService::Chunk>& chunks) {
+void TransferPanel::populate_chunks(const dsa::DynamicArray<engine::TransferEngine::Chunk>& chunks) {
     table_chunks_->setRowCount(chunks.size());
     for (int i = 0; i < chunks.size(); ++i) {
         QTableWidgetItem* c0 = table_chunks_->item(i, 0);
@@ -227,9 +227,9 @@ void TransferPanel::populate_chunks(const dsa::DynamicArray<services::TransferSe
     }
 }
 
-void TransferPanel::update_progress(const services::TransferService& transfer_service,
-                                    const dsa::DynamicArray<services::TransferService::Chunk>& chunks) {
-    services::TransferService::TransferStatistics stats = transfer_service.get_statistics();
+void TransferPanel::update_progress(const engine::TransferEngine& transfer_service,
+                                    const dsa::DynamicArray<engine::TransferEngine::Chunk>& chunks) {
+    engine::TransferEngine::TransferStatistics stats = transfer_service.get_statistics();
     int total = chunks.size();
     int acks = stats.acknowledged_count;
 
@@ -251,20 +251,20 @@ void TransferPanel::update_progress(const services::TransferService& transfer_se
     }
 
     for (int i = 0; i < chunks.size(); ++i) {
-        services::TransferService::ChunkProgress prog = transfer_service.get_chunk_progress(i);
+        engine::TransferEngine::ChunkProgress prog = transfer_service.get_chunk_progress(i);
         QString state_str = "UNSENT";
         QColor state_color = QColor(148, 163, 184);
 
-        if (prog.state == services::TransferService::ChunkState::IN_FLIGHT) {
+        if (prog.state == engine::TransferEngine::ChunkState::IN_FLIGHT) {
             state_str = "IN_FLIGHT";
             state_color = QColor(56, 189, 248);
-        } else if (prog.state == services::TransferService::ChunkState::ACKNOWLEDGED) {
+        } else if (prog.state == engine::TransferEngine::ChunkState::ACKNOWLEDGED) {
             state_str = "ACKNOWLEDGED";
             state_color = QColor(52, 211, 153);
-        } else if (prog.state == services::TransferService::ChunkState::TIMED_OUT) {
+        } else if (prog.state == engine::TransferEngine::ChunkState::TIMED_OUT) {
             state_str = "TIMED_OUT";
             state_color = QColor(251, 191, 36);
-        } else if (prog.state == services::TransferService::ChunkState::FAILED) {
+        } else if (prog.state == engine::TransferEngine::ChunkState::FAILED) {
             state_str = "FAILED";
             state_color = QColor(248, 113, 113);
         }

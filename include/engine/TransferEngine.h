@@ -9,12 +9,12 @@
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 6: Core logic — Chunking, checksums, and reconstruction
-// TransferService manages splitting files into discrete chunks, sequence numbering,
+// TransferEngine manages splitting files into discrete chunks, sequence numbering,
 // educational XOR integrity checksums, out-of-order chunk storage, and file reconstruction.
-class TransferService {
+class TransferEngine {
 public:
     // Representation of a discrete file chunk with stable sequence metadata
     struct Chunk {
@@ -99,8 +99,8 @@ public:
     static const int DEFAULT_ACK_TIMEOUT = 100; // 100 ms per SPEC.md
     static const int DEFAULT_MAX_ATTEMPTS = 3;  // 3 attempts max per SPEC.md
 
-    TransferService();
-    // TransferService does not own dynamically allocated heap memory,
+    TransferEngine();
+    // TransferEngine does not own dynamically allocated heap memory,
     // so no custom destructor is required.
 
     // Educational XOR checksum calculation over byte payload.

@@ -49,7 +49,7 @@ add_executable(pbl2_routing_tests
     src/model/Packet.cpp
     src/model/Link.cpp
     src/model/NetworkGraph.cpp
-    src/services/RoutingService.cpp
+    src/engine/RoutingEngine.cpp
 )
 
 add_executable(pbl2_simulation_tests
@@ -60,14 +60,14 @@ add_executable(pbl2_simulation_tests
     src/model/Packet.cpp
     src/model/Link.cpp
     src/model/NetworkGraph.cpp
-    src/services/RoutingService.cpp
-    src/services/SimulationService.cpp
+    src/engine/RoutingEngine.cpp
+    src/engine/SimulationEngine.cpp
 )
 
 add_executable(pbl2_transfer_tests
     tests/test_transfer.cpp
     src/model/Packet.cpp
-    src/services/TransferService.cpp
+    src/engine/TransferEngine.cpp
 )
 
 add_executable(pbl2_failure_recovery_tests
@@ -78,9 +78,9 @@ add_executable(pbl2_failure_recovery_tests
     src/model/Packet.cpp
     src/model/Link.cpp
     src/model/NetworkGraph.cpp
-    src/services/RoutingService.cpp
-    src/services/SimulationService.cpp
-    src/services/TransferService.cpp
+    src/engine/RoutingEngine.cpp
+    src/engine/SimulationEngine.cpp
+    src/engine/TransferEngine.cpp
 )
 
 add_executable(pbl2_storage_tests
@@ -91,10 +91,10 @@ add_executable(pbl2_storage_tests
     src/model/Packet.cpp
     src/model/Link.cpp
     src/model/NetworkGraph.cpp
-    src/services/RoutingService.cpp
-    src/services/SimulationService.cpp
-    src/services/TransferService.cpp
-    src/services/FileStorageService.cpp
+    src/engine/RoutingEngine.cpp
+    src/engine/SimulationEngine.cpp
+    src/engine/TransferEngine.cpp
+    src/engine/FileStorageEngine.cpp
 )
 
 target_include_directories(pbl2_tests PRIVATE . include)
@@ -162,10 +162,10 @@ if (Qt6_FOUND)
         src/model/Packet.cpp
         src/model/Link.cpp
         src/model/NetworkGraph.cpp
-        src/services/RoutingService.cpp
-        src/services/SimulationService.cpp
-        src/services/TransferService.cpp
-        src/services/FileStorageService.cpp
+        src/engine/RoutingEngine.cpp
+        src/engine/SimulationEngine.cpp
+        src/engine/TransferEngine.cpp
+        src/engine/FileStorageEngine.cpp
     )
 
     add_executable(pbl2_simulator

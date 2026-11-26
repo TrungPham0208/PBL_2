@@ -46,22 +46,22 @@ void test_scenario_1_recovery_demonstration(pbl::ui::MainWindow& window) {
     string payload = "Demonstration Payload for PBL2 Simulator: Verifying seamless retransmission and Dijkstra dynamic rerouting upon network failure!";
     window.handle_start_file_transfer(1, 2, payload, 32);
 
-    TEST_ASSERT(window.get_simulation_service().is_running(), "Simulation clock is running for transfer");
-    TEST_ASSERT(!window.get_transfer_service().is_transfer_completed(), "Transfer in progress");
+    TEST_ASSERT(window.get_simulation_engine().is_running(), "Simulation clock is running for transfer");
+    TEST_ASSERT(!window.get_transfer_engine().is_transfer_completed(), "Transfer in progress");
 
     // 5. Advance ticks to put chunk 0 in flight
     window.handle_advance_ticks(15);
 
     // 6. Inject mid-transfer failure on primary intermediate router
-    pbl::services::RoutingService::Route primary_route = window.get_routing_service().find_route(graph, 1, 2);
+    pbl::engine::RoutingEngine::Route primary_route = window.get_routing_engine().find_route(graph, 1, 2);
     TEST_ASSERT(primary_route.found && primary_route.path.size() >= 3, "Primary route traverses intermediate router");
     int failed_router = primary_route.path[1];
 
-    window.get_simulation_service().fail_node_manually(failed_router);
+    window.get_simulation_engine().fail_node_manually(failed_router);
     TEST_ASSERT(!graph.get_node(failed_router)->is_active(), "Intermediate router manually failed");
 
     // Recalculate route and verify alternate path exists
-    pbl::services::RoutingService::Route alt_route = window.get_routing_service().find_route(graph, 1, 2);
+    pbl::engine::RoutingEngine::Route alt_route = window.get_routing_engine().find_route(graph, 1, 2);
     TEST_ASSERT(alt_route.found, "Alternate Dijkstra route discovered after router failure");
     TEST_ASSERT(alt_route.path[1] != failed_router, "New route avoids failed router");
 
@@ -69,11 +69,11 @@ void test_scenario_1_recovery_demonstration(pbl::ui::MainWindow& window) {
     window.handle_advance_ticks(400);
 
     // 8. Verify transfer completed successfully despite failure
-    TEST_ASSERT(window.get_transfer_service().is_transfer_completed(), "Transfer completed successfully after reroute");
-    TEST_ASSERT(!window.get_transfer_service().is_transfer_failed(), "Transfer did not fail");
+    TEST_ASSERT(window.get_transfer_engine().is_transfer_completed(), "Transfer completed successfully after reroute");
+    TEST_ASSERT(!window.get_transfer_engine().is_transfer_failed(), "Transfer did not fail");
 
     // 9. Verify reconstructed file matches original byte-for-byte
-    string reconstructed = window.get_transfer_service().reconstruct_file();
+    string reconstructed = window.get_transfer_engine().reconstruct_file();
     TEST_ASSERT(reconstructed == payload, "Reconstructed file content exactly matches original payload");
 
     // 10. Verify result export to data/experiments/demonstration_recovery.json
@@ -81,8 +81,8 @@ void test_scenario_1_recovery_demonstration(pbl::ui::MainWindow& window) {
     string exp_file = "data/experiments/demonstration_recovery.json";
     window.handle_export_experiment_results(exp_file);
 
-    pbl::services::FileStorageService storage;
-    pbl::services::FileStorageService::ExperimentResult saved_result = storage.load_experiment_result(exp_file);
+    pbl::engine::FileStorageEngine storage;
+    pbl::engine::FileStorageEngine::ExperimentResult saved_result = storage.load_experiment_result(exp_file);
     TEST_ASSERT(saved_result.outcome == "SUCCESS", "Saved result outcome is SUCCESS");
     TEST_ASSERT(saved_result.simulation_stats.delivered_count > 0, "Delivered count recorded");
     TEST_ASSERT(saved_result.transfer_stats.acknowledged_count > 0, "Transfer acknowledged count recorded");
@@ -105,27 +105,27 @@ void test_scenario_2_retry_limit_demonstration(pbl::ui::MainWindow& window) {
     // 3. Sever all connectivity to destination Client 2
     const pbl::dsa::DynamicArray<int>& neighbors = graph.get_neighbors(2);
     for (int i = 0; i < neighbors.size(); ++i) {
-        window.get_simulation_service().fail_link_manually(2, neighbors[i]);
+        window.get_simulation_engine().fail_link_manually(2, neighbors[i]);
     }
 
     // Verify destination is unreachable
-    pbl::services::RoutingService::Route no_route = window.get_routing_service().find_route(graph, 1, 2);
+    pbl::engine::RoutingEngine::Route no_route = window.get_routing_engine().find_route(graph, 1, 2);
     TEST_ASSERT(!no_route.found, "Destination is strictly unreachable");
 
     // 4. Advance ticks past 3 timeout intervals (3 * 100 ms + margin = 350 ms)
     window.handle_advance_ticks(350);
 
     // 5. Verify transfer failed due to retry limit exhaustion
-    TEST_ASSERT(window.get_transfer_service().is_transfer_failed(), "Transfer marked FAILED after retry limit reached");
-    TEST_ASSERT(!window.get_transfer_service().is_transfer_completed(), "Transfer is not completed");
-    TEST_ASSERT(window.get_transfer_service().get_statistics().failed_count > 0, "Failed count recorded in statistics");
+    TEST_ASSERT(window.get_transfer_engine().is_transfer_failed(), "Transfer marked FAILED after retry limit reached");
+    TEST_ASSERT(!window.get_transfer_engine().is_transfer_completed(), "Transfer is not completed");
+    TEST_ASSERT(window.get_transfer_engine().get_statistics().failed_count > 0, "Failed count recorded in statistics");
 
     // 6. Verify result export to data/experiments/demonstration_failure.json
     string exp_file = "data/experiments/demonstration_failure.json";
     window.handle_export_experiment_results(exp_file);
 
-    pbl::services::FileStorageService storage;
-    pbl::services::FileStorageService::ExperimentResult saved_result = storage.load_experiment_result(exp_file);
+    pbl::engine::FileStorageEngine storage;
+    pbl::engine::FileStorageEngine::ExperimentResult saved_result = storage.load_experiment_result(exp_file);
     TEST_ASSERT(saved_result.outcome == "FAILURE", "Saved result outcome is FAILURE");
     TEST_ASSERT(saved_result.transfer_stats.failed_count > 0, "Failed count preserved in exported JSON");
     TEST_ASSERT(saved_result.packet_events.size() > 0, "Failure event logs preserved");

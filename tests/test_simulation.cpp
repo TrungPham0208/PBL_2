@@ -5,7 +5,7 @@
 #include "model/NetworkGraph.h"
 #include "model/Packet.h"
 #include "model/Router.h"
-#include "services/SimulationService.h"
+#include "engine/SimulationEngine.h"
 
 using namespace std;
 
@@ -95,7 +95,7 @@ void test_transmission_timing_and_ticks() {
     // Bandwidth = 100 bytes/ms, Latency = 5 ms, Capacity = 5
     graph.add_link(1, 2, 100, 5, 0.0, 0.0, 5);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
 
     // Check transmission time formula: ceil(S / B)
@@ -143,7 +143,7 @@ void test_link_serialization_busy_pipelining() {
     // Bandwidth = 100 bytes/ms, Latency = 3 ms
     graph.add_link(1, 2, 100, 3, 0.0, 0.0, 5);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
 
     // Enqueue two 200-byte packets (tx_time = 2 ms each)
@@ -211,7 +211,7 @@ void test_failure_drops_packets() {
     graph.add_link(1, 2, 100, 10, 0.0, 0.0, 5);
     graph.add_link(2, 3, 100, 10, 0.0, 0.0, 5);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
 
     // Case 1: In-flight packet dropped upon link failure
@@ -251,26 +251,26 @@ void test_failure_drops_packets() {
 
 // Milestone 5: Test simulation lifecycle controls (start, pause, resume, reset)
 void test_simulation_lifecycle() {
-    pbl::services::SimulationService sim;
-    assert(sim.get_state() == pbl::services::SimulationService::State::STOPPED);
+    pbl::engine::SimulationEngine sim;
+    assert(sim.get_state() == pbl::engine::SimulationEngine::State::STOPPED);
     assert(!sim.is_running());
 
     sim.start();
-    assert(sim.get_state() == pbl::services::SimulationService::State::RUNNING);
+    assert(sim.get_state() == pbl::engine::SimulationEngine::State::RUNNING);
     assert(sim.is_running());
 
     sim.pause();
-    assert(sim.get_state() == pbl::services::SimulationService::State::PAUSED);
+    assert(sim.get_state() == pbl::engine::SimulationEngine::State::PAUSED);
     assert(!sim.is_running());
 
     sim.resume();
-    assert(sim.get_state() == pbl::services::SimulationService::State::RUNNING);
+    assert(sim.get_state() == pbl::engine::SimulationEngine::State::RUNNING);
 
     sim.advance_ticks(10);
     assert(sim.get_current_tick() == 10);
 
     sim.reset();
-    assert(sim.get_state() == pbl::services::SimulationService::State::STOPPED);
+    assert(sim.get_state() == pbl::engine::SimulationEngine::State::STOPPED);
     assert(sim.get_current_tick() == 0);
     assert(sim.get_statistics().sent_count == 0);
     assert(sim.get_in_flight_count() == 0);
@@ -284,7 +284,7 @@ void test_loss_and_deterministic_defaults() {
     // Link with 0.0 default loss and corruption
     graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
     sim.start();
 
@@ -326,7 +326,7 @@ void test_corruption_injection_and_detection() {
     graph.add_client(2, "Client2");
     graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
     sim.start();
 
@@ -378,7 +378,7 @@ void test_manual_failure_immediate() {
     graph.add_router(2, "Router2");
     graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
     sim.start();
 
@@ -411,7 +411,7 @@ void test_heartbeat_timeout_failure() {
     graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
     graph.add_link(2, 3, 100, 5, 0.0, 0.0, 10);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
     sim.set_heartbeat_interval(100);
     sim.set_heartbeat_timeout(300);
@@ -466,7 +466,7 @@ void test_review_checkpoint_event_log_distinction() {
     graph.add_link(2, 3, 100, 5, 0.0, 0.0, 10);
     graph.add_link(3, 4, 100, 5, 0.0, 0.0, 10);
 
-    pbl::services::SimulationService sim;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
     sim.set_heartbeat_interval(100);
     sim.set_heartbeat_timeout(300);

@@ -10,7 +10,7 @@
 #define PBL_RESTORE_EMIT_TP
 #endif
 #include "pbl/dsa/DynamicArray.h"
-#include "services/TransferService.h"
+#include "engine/TransferEngine.h"
 #ifdef PBL_RESTORE_EMIT_TP
 #pragma pop_macro("emit")
 #undef PBL_RESTORE_EMIT_TP
@@ -45,9 +45,9 @@ public:
 
     void reset_display();
     void set_transfer_status_in_progress();
-    void populate_chunks(const dsa::DynamicArray<services::TransferService::Chunk>& chunks);
-    void update_progress(const services::TransferService& transfer_service,
-                         const dsa::DynamicArray<services::TransferService::Chunk>& chunks);
+    void populate_chunks(const dsa::DynamicArray<engine::TransferEngine::Chunk>& chunks);
+    void update_progress(const engine::TransferEngine& transfer_service,
+                         const dsa::DynamicArray<engine::TransferEngine::Chunk>& chunks);
 
     void set_guided_step_text(const QString& text);
     void update_nav_buttons(bool active, int step, int max_step, bool auto_running);

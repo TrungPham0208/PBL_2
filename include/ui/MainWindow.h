@@ -10,10 +10,10 @@
 #endif
 #include "model/NetworkGraph.h"
 #include "pbl/dsa/DynamicArray.h"
-#include "services/FileStorageService.h"
-#include "services/RoutingService.h"
-#include "services/SimulationService.h"
-#include "services/TransferService.h"
+#include "engine/FileStorageEngine.h"
+#include "engine/RoutingEngine.h"
+#include "engine/SimulationEngine.h"
+#include "engine/TransferEngine.h"
 #ifdef PBL_RESTORE_EMIT_MW
 #pragma pop_macro("emit")
 #undef PBL_RESTORE_EMIT_MW
@@ -48,9 +48,9 @@ public:
 
     // Public accessors for testing & verification
     model::NetworkGraph& get_network_graph();
-    services::RoutingService& get_routing_service();
-    services::SimulationService& get_simulation_service();
-    services::TransferService& get_transfer_service();
+    engine::RoutingEngine& get_routing_engine();
+    engine::SimulationEngine& get_simulation_engine();
+    engine::TransferEngine& get_transfer_engine();
     TopologyCanvas* get_canvas();
 
     // Public actions exposed for direct automated UI wiring verification
@@ -88,10 +88,10 @@ private slots:
 private:
     // Core Domain Services
     model::NetworkGraph graph_;
-    services::RoutingService routing_service_;
-    services::SimulationService simulation_service_;
-    services::TransferService transfer_service_;
-    services::FileStorageService storage_service_;
+    engine::RoutingEngine routing_engine_;
+    engine::SimulationEngine simulation_engine_;
+    engine::TransferEngine transfer_engine_;
+    engine::FileStorageEngine storage_engine_;
 
     // Active Transfer Session State
     int active_source_id_;
@@ -100,7 +100,7 @@ private:
     int next_chunk_to_send_idx_;
     int last_processed_delivered_idx_;
     std::string discovered_probe_path_;
-    dsa::DynamicArray<services::TransferService::Chunk> transfer_chunks_;
+    dsa::DynamicArray<engine::TransferEngine::Chunk> transfer_chunks_;
     bool topology_modified_manually_;
 
     // Simulation Playback Timer

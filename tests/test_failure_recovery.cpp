@@ -5,9 +5,9 @@
 #include "model/NetworkGraph.h"
 #include "model/Packet.h"
 #include "model/Router.h"
-#include "services/RoutingService.h"
-#include "services/SimulationService.h"
-#include "services/TransferService.h"
+#include "engine/RoutingEngine.h"
+#include "engine/SimulationEngine.h"
+#include "engine/TransferEngine.h"
 
 using namespace std;
 
@@ -31,10 +31,10 @@ void test_failed_element_removed_immediately() {
     graph.add_link(2, 4, 100, 20, 0.0, 0.0, 10);
     graph.add_link(4, 5, 100, 20, 0.0, 0.0, 10);
 
-    pbl::services::RoutingService routing;
+    pbl::engine::RoutingEngine routing;
 
     // Initial shortest path should be through Router 3
-    pbl::services::RoutingService::Route initial_route = routing.find_route(graph, 1, 5);
+    pbl::engine::RoutingEngine::Route initial_route = routing.find_route(graph, 1, 5);
     assert(initial_route.found);
     assert(initial_route.path.size() == 4);
     assert(initial_route.path[0] == 1);
@@ -47,7 +47,7 @@ void test_failed_element_removed_immediately() {
     graph.fail_link(2, 3);
     assert(!routing.is_route_valid(graph, initial_route));
 
-    pbl::services::RoutingService::Route reroute1 = routing.recalculate_route(graph, 1, 5);
+    pbl::engine::RoutingEngine::Route reroute1 = routing.recalculate_route(graph, 1, 5);
     assert(reroute1.found);
     assert(reroute1.path.size() == 4);
     assert(reroute1.path[0] == 1);
@@ -59,7 +59,7 @@ void test_failed_element_removed_immediately() {
     graph.fail_node(4);
     assert(!routing.is_route_valid(graph, reroute1));
 
-    pbl::services::RoutingService::Route no_route = routing.recalculate_route(graph, 1, 5);
+    pbl::engine::RoutingEngine::Route no_route = routing.recalculate_route(graph, 1, 5);
     // Invariant: Unreachable destinations are explicitly reported
     assert(!no_route.found);
 }
@@ -82,10 +82,10 @@ void test_in_transit_packets_dropped_never_magically_moved() {
     graph.add_link(2, 4, 100, 10, 0.0, 0.0, 10);
     graph.add_link(4, 5, 100, 10, 0.0, 0.0, 10);
 
-    pbl::services::RoutingService routing;
-    pbl::services::SimulationService sim;
+    pbl::engine::RoutingEngine routing;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
-    sim.set_routing_service(&routing);
+    sim.set_routing_engine(&routing);
     sim.start();
 
     // Send packet from 2 towards 5 along link 2 -> 3
@@ -116,7 +116,7 @@ void test_in_transit_packets_dropped_never_magically_moved() {
 
 // Milestone 9: Invariant: Acknowledged chunks remain acknowledged; only missing chunks are retried.
 void test_acknowledged_chunks_preserved_only_missing_retried() {
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("ChunkA_ChunkB_ChunkC_", 7); // 3 chunks (7, 7, 7)
     assert(transfer.get_sender_chunk_count() == 3);
 
@@ -168,20 +168,20 @@ void test_complete_recovery_sequence_with_alternate_route() {
     graph.add_link(2, 4, 100, 15, 0.0, 0.0, 10);
     graph.add_link(4, 5, 100, 15, 0.0, 0.0, 10);
 
-    pbl::services::RoutingService routing;
-    pbl::services::SimulationService sim;
+    pbl::engine::RoutingEngine routing;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
-    sim.set_routing_service(&routing);
+    sim.set_routing_engine(&routing);
     sim.start();
 
     // 1. Prepare file transfer (2 chunks: "Part1_" and "Part2_")
     string original_file = "Part1_Part2_";
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender(original_file, 6);
     transfer.init_receiver(2);
 
     // 2. Discover best initial route: 1 -> 2 -> 3 -> 5
-    pbl::services::RoutingService::Route active_route = routing.find_route(graph, 1, 5);
+    pbl::engine::RoutingEngine::Route active_route = routing.find_route(graph, 1, 5);
     assert(active_route.found);
     assert(active_route.path[2] == 3); // Via primary router 3
 
@@ -224,7 +224,7 @@ void test_complete_recovery_sequence_with_alternate_route() {
     assert(timeouts[0] == 1);
 
     // 7. Route recalculation: Router 3 is failed, Dijkstra finds alternate route 1 -> 2 -> 4 -> 5
-    pbl::services::RoutingService::Route new_route = routing.recalculate_route(graph, 1, 5);
+    pbl::engine::RoutingEngine::Route new_route = routing.recalculate_route(graph, 1, 5);
     assert(new_route.found);
     assert(new_route.path[2] == 4); // Rerouted through Router 4!
 
@@ -266,13 +266,13 @@ void test_recovery_fails_when_no_alternate_route_exists() {
     graph.add_link(1, 2, 100, 5, 0.0, 0.0, 10);
     graph.add_link(2, 3, 100, 5, 0.0, 0.0, 10);
 
-    pbl::services::RoutingService routing;
-    pbl::services::SimulationService sim;
+    pbl::engine::RoutingEngine routing;
+    pbl::engine::SimulationEngine sim;
     sim.set_network_graph(&graph);
-    sim.set_routing_service(&routing);
+    sim.set_routing_engine(&routing);
     sim.start();
 
-    pbl::services::TransferService transfer;
+    pbl::engine::TransferEngine transfer;
     transfer.init_sender("IrrecoverableData", 10);
 
     // Initial send
@@ -282,7 +282,7 @@ void test_recovery_fails_when_no_alternate_route_exists() {
     sim.fail_node_manually(2);
 
     // Dijkstra route recalculation confirms no alternative route exists
-    pbl::services::RoutingService::Route alt_route = routing.recalculate_route(graph, 1, 3);
+    pbl::engine::RoutingEngine::Route alt_route = routing.recalculate_route(graph, 1, 3);
     assert(!alt_route.found);
 
     // Retransmissions fail and reach retry limit

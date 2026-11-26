@@ -87,10 +87,10 @@ void RoutingPanel::fit_table_height(QTableWidget* table, int min_height) {
 }
 
 void RoutingPanel::update_route_display(const model::NetworkGraph& graph,
-                                        const services::RoutingService& routing_service,
+                                        const engine::RoutingEngine& routing_service,
                                         int source_id,
                                         int destination_id,
-                                        const services::RoutingService::Route& r) {
+                                        const engine::RoutingEngine::Route& r) {
     if (source_id == -1 || destination_id == -1) {
         lbl_active_route_->setText("Select Source & Destination clients to compute route.");
         lbl_route_cost_->setText("Cost: N/A");
@@ -146,7 +146,7 @@ void RoutingPanel::update_route_display(const model::NetworkGraph& graph,
 }
 
 void RoutingPanel::update_dijkstra_state_table(const model::NetworkGraph& graph,
-                                               const services::RoutingService& routing_service,
+                                               const engine::RoutingEngine& routing_service,
                                                int source_id) {
     const dsa::DynamicArray<int>& node_ids = graph.get_node_ids();
     std::vector<int> sorted_ids;
@@ -234,7 +234,7 @@ void RoutingPanel::update_dijkstra_state_table(const model::NetworkGraph& graph,
 }
 
 void RoutingPanel::update_queue_table(const model::NetworkGraph& graph,
-                                      const services::RoutingService& routing_service) {
+                                      const engine::RoutingEngine& routing_service) {
     const dsa::DynamicArray<model::Link*>& links = graph.get_all_links();
     if (table_queues_->rowCount() != links.size()) {
         table_queues_->setRowCount(links.size());

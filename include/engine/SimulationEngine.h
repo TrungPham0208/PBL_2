@@ -11,17 +11,17 @@
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
-class RoutingService;
+class RoutingEngine;
 
 // Milestone 5, 8 & 9: Fixed-tick simulation, link queues, failure detection, and automatic rerouting
-// SimulationService implements the 1 ms discrete step clock,
+// SimulationEngine implements the 1 ms discrete step clock,
 // priority-based link queue scheduling, bandwidth serialization delay,
 // transmission latency, deterministic packet dropping upon node/link failure,
 // deterministic manual loss/corruption injection, configured random loss/corruption,
 // manual failure handling, and heartbeat-based router failure detection.
-class SimulationService {
+class SimulationEngine {
 public:
     enum class State {
         STOPPED,
@@ -92,16 +92,16 @@ public:
     static const int DEFAULT_HEARTBEAT_INTERVAL = 100; // 100 ms per SPEC.md
     static const int DEFAULT_FAILURE_TIMEOUT = 300;    // 300 ms per SPEC.md
 
-    SimulationService();
-    // SimulationService does not manage dynamically allocated heap memory,
+    SimulationEngine();
+    // SimulationEngine does not manage dynamically allocated heap memory,
     // so no custom destructor is needed.
 
     void set_network_graph(model::NetworkGraph* graph);
     model::NetworkGraph* get_network_graph() const;
 
     // Milestone 9: Routing service attachment for automatic hop-by-hop forwarding and rerouting
-    void set_routing_service(RoutingService* routing);
-    RoutingService* get_routing_service() const;
+    void set_routing_engine(RoutingEngine* routing);
+    RoutingEngine* get_routing_engine() const;
 
     // Simulation lifecycle controls
     void start();
@@ -167,7 +167,7 @@ public:
 
 private:
     model::NetworkGraph* graph_;
-    RoutingService* routing_service_;
+    RoutingEngine* routing_engine_;
     State state_;
     int current_tick_;
     Statistics statistics_;

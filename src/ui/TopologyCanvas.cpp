@@ -102,12 +102,12 @@ void TopologyCanvas::clear_probe_visuals() {
     update();
 }
 
-void TopologyCanvas::set_routing_service(services::RoutingService* routing) {
+void TopologyCanvas::set_routing_engine(engine::RoutingEngine* routing) {
     routing_ = routing;
     update();
 }
 
-void TopologyCanvas::set_simulation_service(services::SimulationService* simulation) {
+void TopologyCanvas::set_simulation_engine(engine::SimulationEngine* simulation) {
     simulation_ = simulation;
     update();
 }
@@ -517,12 +517,12 @@ void TopologyCanvas::draw_links(QPainter& painter) {
 void TopologyCanvas::draw_packets(QPainter& painter) {
     if (simulation_ == nullptr) return;
 
-    const dsa::DynamicArray<services::SimulationService::InFlightPacket>& in_flight =
+    const dsa::DynamicArray<engine::SimulationEngine::InFlightPacket>& in_flight =
         simulation_->get_in_flight_packets();
     int current_tick = simulation_->get_current_tick();
 
     for (int i = 0; i < in_flight.size(); ++i) {
-        const services::SimulationService::InFlightPacket& ifp = in_flight[i];
+        const engine::SimulationEngine::InFlightPacket& ifp = in_flight[i];
         int from_id = ifp.from_node_id;
         int to_id = ifp.to_node_id;
 

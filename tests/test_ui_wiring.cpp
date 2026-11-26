@@ -29,15 +29,15 @@ static int tests_passed = 0;
     } while (0)
 
 void test_initialization_and_services(pbl::ui::MainWindow& window) {
-    TEST_ASSERT(window.get_simulation_service().get_network_graph() != nullptr,
+    TEST_ASSERT(window.get_simulation_engine().get_network_graph() != nullptr,
                 "Simulation service attached to NetworkGraph");
-    TEST_ASSERT(window.get_simulation_service().get_routing_service() != nullptr,
-                "Simulation service attached to RoutingService");
+    TEST_ASSERT(window.get_simulation_engine().get_routing_engine() != nullptr,
+                "Simulation service attached to RoutingEngine");
     TEST_ASSERT(window.get_canvas() != nullptr,
                 "TopologyCanvas instantiated");
-    TEST_ASSERT(window.get_simulation_service().get_state() == pbl::services::SimulationService::State::STOPPED,
+    TEST_ASSERT(window.get_simulation_engine().get_state() == pbl::engine::SimulationEngine::State::STOPPED,
                 "Initial simulation state is STOPPED");
-    TEST_ASSERT(window.get_simulation_service().get_current_tick() == 0,
+    TEST_ASSERT(window.get_simulation_engine().get_current_tick() == 0,
                 "Initial simulation tick is 0");
 }
 
@@ -65,34 +65,34 @@ void test_reproducible_topology_generation(pbl::ui::MainWindow& window) {
 
 void test_simulation_controls_state_machine(pbl::ui::MainWindow& window) {
     window.handle_reset_simulation();
-    TEST_ASSERT(window.get_simulation_service().get_state() == pbl::services::SimulationService::State::STOPPED,
+    TEST_ASSERT(window.get_simulation_engine().get_state() == pbl::engine::SimulationEngine::State::STOPPED,
                 "Reset sets state to STOPPED");
-    TEST_ASSERT(window.get_simulation_service().get_current_tick() == 0,
+    TEST_ASSERT(window.get_simulation_engine().get_current_tick() == 0,
                 "Reset sets tick to 0");
 
     window.handle_start_simulation();
-    TEST_ASSERT(window.get_simulation_service().get_state() == pbl::services::SimulationService::State::RUNNING,
+    TEST_ASSERT(window.get_simulation_engine().get_state() == pbl::engine::SimulationEngine::State::RUNNING,
                 "Start sets state to RUNNING");
 
     window.handle_pause_simulation();
-    TEST_ASSERT(window.get_simulation_service().get_state() == pbl::services::SimulationService::State::PAUSED,
+    TEST_ASSERT(window.get_simulation_engine().get_state() == pbl::engine::SimulationEngine::State::PAUSED,
                 "Pause sets state to PAUSED");
 
     window.handle_resume_simulation();
-    TEST_ASSERT(window.get_simulation_service().get_state() == pbl::services::SimulationService::State::RUNNING,
+    TEST_ASSERT(window.get_simulation_engine().get_state() == pbl::engine::SimulationEngine::State::RUNNING,
                 "Resume sets state to RUNNING");
 
-    int prev_tick = window.get_simulation_service().get_current_tick();
+    int prev_tick = window.get_simulation_engine().get_current_tick();
     window.handle_single_tick();
-    TEST_ASSERT(window.get_simulation_service().get_current_tick() == prev_tick + 1,
+    TEST_ASSERT(window.get_simulation_engine().get_current_tick() == prev_tick + 1,
                 "Single tick advances clock by 1");
 
     window.handle_advance_ticks(10);
-    TEST_ASSERT(window.get_simulation_service().get_current_tick() == prev_tick + 11,
+    TEST_ASSERT(window.get_simulation_engine().get_current_tick() == prev_tick + 11,
                 "Advance ticks advances clock by 10");
 
     window.handle_reset_simulation();
-    TEST_ASSERT(window.get_simulation_service().get_current_tick() == 0,
+    TEST_ASSERT(window.get_simulation_engine().get_current_tick() == 0,
                 "Reset clock returns to 0");
 }
 
@@ -120,7 +120,7 @@ void test_fault_injection_and_rerouting(pbl::ui::MainWindow& window) {
     graph.add_link(5, 4, 100, 20, 0.0, 0.0, 10);
 
     // Calculate initial route 1 -> 4
-    pbl::dsa::DynamicArray<int> route1 = window.get_routing_service().find_route(graph, 1, 4).path;
+    pbl::dsa::DynamicArray<int> route1 = window.get_routing_engine().find_route(graph, 1, 4).path;
     TEST_ASSERT(route1.size() == 4, "Initial route has 4 hops");
     TEST_ASSERT(route1[1] == 2 && route1[2] == 3, "Initial route traverses primary path via Router 2 and 3");
 
@@ -130,14 +130,14 @@ void test_fault_injection_and_rerouting(pbl::ui::MainWindow& window) {
     TEST_ASSERT(!graph.get_node(2)->is_active(), "Router 2 marked failed");
 
     // Route should automatically recalculate via backup Router 5
-    pbl::dsa::DynamicArray<int> route2 = window.get_routing_service().find_route(graph, 1, 4).path;
+    pbl::dsa::DynamicArray<int> route2 = window.get_routing_engine().find_route(graph, 1, 4).path;
     TEST_ASSERT(route2.size() == 3, "Rerouted route has 3 hops");
     TEST_ASSERT(route2[1] == 5, "Rerouted path traverses Router 5");
 
     // Recover Router 2
     window.handle_toggle_failure_selected();
     TEST_ASSERT(graph.get_node(2)->is_active(), "Router 2 recovered");
-    pbl::dsa::DynamicArray<int> route3 = window.get_routing_service().find_route(graph, 1, 4).path;
+    pbl::dsa::DynamicArray<int> route3 = window.get_routing_engine().find_route(graph, 1, 4).path;
     TEST_ASSERT(route3[1] == 2, "Path restored to primary route via Router 2");
 }
 
@@ -148,11 +148,11 @@ void test_transfer_initiation_and_persistence(pbl::ui::MainWindow& window) {
     string payload = "Antigravity PBL2 Network Protocol Verification Payload";
     window.handle_start_file_transfer(1, 2, payload, 32);
 
-    TEST_ASSERT(window.get_simulation_service().is_running(), "Transfer automatically started simulation clock");
+    TEST_ASSERT(window.get_simulation_engine().is_running(), "Transfer automatically started simulation clock");
 
     // Advance simulation ticks
     window.handle_advance_ticks(20);
-    TEST_ASSERT(window.get_simulation_service().get_current_tick() == 20, "Simulation advanced to tick 20");
+    TEST_ASSERT(window.get_simulation_engine().get_current_tick() == 20, "Simulation advanced to tick 20");
 
     // Test Config Persistence via UI
     string temp_cfg = "test_ui_temp_cfg.json";

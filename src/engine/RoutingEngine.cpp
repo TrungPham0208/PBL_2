@@ -1,16 +1,16 @@
 #include <bits/stdc++.h>
 
-#include "services/RoutingService.h"
+#include "engine/RoutingEngine.h"
 
 using namespace std;
 
 namespace pbl {
-namespace services {
+namespace engine {
 
 // Milestone 4: Core logic — Dijkstra routing
 // Constructor initializes default formula weights inside the constructor body.
 // We avoid high-level member initializer lists (: weight(1.0)) to keep code beginner-friendly.
-RoutingService::RoutingService() {
+RoutingEngine::RoutingEngine() {
     latency_weight_ = 1.0;
     bandwidth_weight_ = 1.0;
     loss_weight_ = 2.0;
@@ -18,7 +18,7 @@ RoutingService::RoutingService() {
 }
 
 // Sets the weights used in the centralized routing cost formula.
-void RoutingService::set_weights(double latency_weight, double bandwidth_weight,
+void RoutingEngine::set_weights(double latency_weight, double bandwidth_weight,
                                  double loss_weight, double reference_bandwidth) {
     if (latency_weight < 0.0 || bandwidth_weight < 0.0 || loss_weight < 0.0 || reference_bandwidth <= 0.0) {
         throw invalid_argument("routing weights and reference bandwidth must be non-negative");
@@ -29,25 +29,25 @@ void RoutingService::set_weights(double latency_weight, double bandwidth_weight,
     reference_bandwidth_ = reference_bandwidth;
 }
 
-double RoutingService::get_latency_weight() const {
+double RoutingEngine::get_latency_weight() const {
     return latency_weight_;
 }
 
-double RoutingService::get_bandwidth_weight() const {
+double RoutingEngine::get_bandwidth_weight() const {
     return bandwidth_weight_;
 }
 
-double RoutingService::get_loss_weight() const {
+double RoutingEngine::get_loss_weight() const {
     return loss_weight_;
 }
 
-double RoutingService::get_reference_bandwidth() const {
+double RoutingEngine::get_reference_bandwidth() const {
     return reference_bandwidth_;
 }
 
 // Centralized link cost calculation from a Link reference.
 // Protects invariant: route costs are non-negative.
-double RoutingService::calculate_link_cost(const model::Link& link) const {
+double RoutingEngine::calculate_link_cost(const model::Link& link) const {
     return calculate_cost(link.get_latency(), link.get_bandwidth(), link.get_loss_probability());
 }
 
@@ -57,7 +57,7 @@ double RoutingService::calculate_link_cost(const model::Link& link) const {
 // 1. Latency (ms): Higher latency directly delays round-trip times and packet forwarding.
 // 2. Bandwidth (bytes/ms): Lower bandwidth increases transmission time (S / B), so cost is inversely proportional to bandwidth.
 // 3. Loss probability [0.0, 1.0]: Loss triggers timeouts and retransmissions, adding an expected delay penalty.
-double RoutingService::calculate_cost(int latency, int bandwidth, double loss_probability) const {
+double RoutingEngine::calculate_cost(int latency, int bandwidth, double loss_probability) const {
     if (latency < 0) {
         latency = 0;
     }
@@ -83,7 +83,7 @@ double RoutingService::calculate_cost(int latency, int bandwidth, double loss_pr
 // PriorityQueue is a max-heap (larger priority integer is extracted first).
 // By negating the scaled cost (-cost), the minimum cost becomes the largest number,
 // allowing our custom PriorityQueue to behave as a min-heap for Dijkstra's algorithm.
-int RoutingService::cost_to_priority(double cost) const {
+int RoutingEngine::cost_to_priority(double cost) const {
     const double SCALE = 1000.0;
     int scaled = static_cast<int>(cost * SCALE);
     return -scaled;
@@ -95,7 +95,7 @@ int RoutingService::cost_to_priority(double cost) const {
 // - Lowest cost path is discovered.
 // - Unreachable destinations are explicitly reported.
 // - Link queues and packet states are never mutated.
-RoutingService::Route RoutingService::find_route(const model::NetworkGraph& graph,
+RoutingEngine::Route RoutingEngine::find_route(const model::NetworkGraph& graph,
                                                 int source_id, int destination_id) const {
     Route result;
 
@@ -217,8 +217,8 @@ RoutingService::Route RoutingService::find_route(const model::NetworkGraph& grap
 }
 
 // Calculates the routing table for source_id to all reachable active nodes in the network
-dsa::DynamicArray<RoutingService::RoutingTableEntry>
-RoutingService::calculate_routing_table(const model::NetworkGraph& graph, int source_id) const {
+dsa::DynamicArray<RoutingEngine::RoutingTableEntry>
+RoutingEngine::calculate_routing_table(const model::NetworkGraph& graph, int source_id) const {
     dsa::DynamicArray<RoutingTableEntry> table;
 
     if (!graph.has_node(source_id) || !graph.is_node_active(source_id)) {
@@ -250,7 +250,7 @@ RoutingService::calculate_routing_table(const model::NetworkGraph& graph, int so
 }
 
 // Verifies if an existing route remains fully usable (no failed nodes or links along its path)
-bool RoutingService::is_route_valid(const model::NetworkGraph& graph, const Route& route) const {
+bool RoutingEngine::is_route_valid(const model::NetworkGraph& graph, const Route& route) const {
     if (!route.found || route.path.empty()) {
         return false;
     }
@@ -276,7 +276,7 @@ bool RoutingService::is_route_valid(const model::NetworkGraph& graph, const Rout
 }
 
 // Recalculates route after a network failure
-RoutingService::Route RoutingService::recalculate_route(const model::NetworkGraph& graph,
+RoutingEngine::Route RoutingEngine::recalculate_route(const model::NetworkGraph& graph,
                                                         int source_id, int destination_id) const {
     return find_route(graph, source_id, destination_id);
 }
